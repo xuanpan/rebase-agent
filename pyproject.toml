@@ -1,0 +1,68 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "rebase-agent"
+version = "0.1.0"
+description = "AI Intelligence Layer for business-focused transformation analysis"
+readme = "README.md"
+license = {file = "LICENSE"}
+authors = [
+    {name = "Rebase Team", email = "team@rebase.com"}
+]
+keywords = ["transformation", "modernization", "ai", "business-case", "roi"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "pydantic>=2.5.0",
+    "openai>=1.3.0",
+    "jinja2>=3.1.0",
+    "sqlalchemy[asyncio]>=2.0.0",
+    # "redis>=5.0.0",  # Removed for POC simplicity
+    "httpx>=0.25.0",
+    "loguru>=0.7.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=23.0.0",
+    "flake8>=6.0.0",
+    "mypy>=1.7.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/xuanpan/rebase-agent"
+Repository = "https://github.com/xuanpan/rebase-agent"
+Issues = "https://github.com/xuanpan/rebase-agent/issues"
+
+[tool.black]
+line-length = 88
+target-version = ['py311']
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+asyncio_mode = "auto"
