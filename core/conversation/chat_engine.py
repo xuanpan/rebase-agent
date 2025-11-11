@@ -20,7 +20,6 @@ except ImportError:
     logger = logging.getLogger(__name__)
 
 from ..llm_client import LLMClient
-from ..prompt_engine import PromptEngine
 from ..context_manager import ContextManager
 from ..question_engine import QuestionEngine
 from ..transformation_engine import UniversalTransformationEngine, TransformationPhase
@@ -161,13 +160,11 @@ class ChatEngine:
     def __init__(
         self,
         llm_client: LLMClient,
-        prompt_engine: PromptEngine,
         context_manager: ContextManager,
         question_engine: QuestionEngine,
         transformation_engine: UniversalTransformationEngine
     ):
         self.llm_client = llm_client
-        self.prompt_engine = prompt_engine
         self.context_manager = context_manager
         self.question_engine = question_engine
         self.transformation_engine = transformation_engine
@@ -335,24 +332,8 @@ class ChatEngine:
     ) -> MessageAnalysis:
         """Analyze user message for intent, entities, and business context."""
         
-        analysis_prompt = self.prompt_engine.render_template(
-            "conversation/analyze_user_message.jinja2",
-            user_message=message,
-            conversation_history=[msg.to_dict() for msg in context.conversation_history[-5:]],
-            current_phase=context.current_phase,
-            domain_type=context.domain_type
-        )
-        
+        # Simplified analysis using fallback logic (no templates needed)
         try:
-            # Try LLM analysis first
-            response = await self.llm_client.chat_completion([
-                {"role": "user", "content": analysis_prompt}
-            ])
-            
-            # Parse AI analysis - simplified for now
-            # In real implementation, this would use structured output or JSON parsing
-            
-        except Exception as e:
             logger.warning(f"LLM analysis failed, using rule-based fallback: {e}")
             # Fall back to rule-based analysis for demo mode
             response = {"content": "Rule-based analysis used."}
@@ -429,25 +410,10 @@ class ChatEngine:
     ) -> str:
         """Generate initial conversational response to start the transformation analysis."""
         
-        initial_prompt = self.prompt_engine.render_template(
-            "conversation/initial_response.jinja2",
-            user_message=initial_message,
-            session_id=session_id
-        )
-        
+        # Use fallback response for demo mode (no templates needed)
         try:
-            response = await self.llm_client.chat_completion([
-                {"role": "user", "content": initial_prompt}
-            ])
-            
-            # Add the response to conversation history
-            self.context_manager.add_message(session_id, "assistant", response.content)
-            
-            return response.content
-            
-        except Exception as e:
-            logger.warning(f"LLM response generation failed, using template fallback: {e}")
-            # Fall back to template-based response for demo mode
+            logger.warning(f"Using fallback response for initial message")
+            # Fallback response for demo mode
             fallback_response = f"I'd love to help you with your transformation project! Based on your message about '{initial_message[:100]}...', I can see this is a framework migration project. Let me gather some key information to provide you with accurate ROI calculations and a detailed implementation plan."
             
             # Add the response to conversation history

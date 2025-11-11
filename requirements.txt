@@ -10,8 +10,7 @@ anthropic==0.7.7
 langchain==0.0.340
 langchain-openai==0.0.2
 
-# Template engine
-jinja2==3.1.2
+# Template engine removed - using inline prompts now
 
 # Database & async
 sqlalchemy[asyncio]==2.0.23

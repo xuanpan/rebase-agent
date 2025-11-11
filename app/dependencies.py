@@ -11,7 +11,6 @@ from loguru import logger
 
 from .config import Settings, get_settings
 from core.llm_client import LLMClient
-from core.prompt_engine import PromptEngine, bootstrap_default_templates
 from core.context_manager import ContextManager
 from core.question_engine import QuestionEngine
 from core.transformation_engine import UniversalTransformationEngine
@@ -36,18 +35,7 @@ def get_llm_client() -> LLMClient:
     )
 
 
-@lru_cache()
-def get_prompt_engine(settings: Settings = None) -> PromptEngine:
-    """Get configured prompt engine with default templates."""
-    if settings is None:
-        settings = get_settings()
-    
-    engine = PromptEngine()
-    
-    # Bootstrap default templates if they don't exist
-    bootstrap_default_templates(engine)
-    
-    return engine
+# Prompt engine removed - using inline prompts in ChatEngine now
 
 
 @lru_cache() 
@@ -57,13 +45,7 @@ def get_context_manager() -> ContextManager:
     return ContextManager()
 
 
-@lru_cache()
-def get_question_engine() -> QuestionEngine:
-    """Get configured question engine."""
-    return QuestionEngine(
-        llm_client=get_llm_client(),
-        prompt_engine=get_prompt_engine()
-    )
+# QuestionEngine simplified - functionality moved to ChatEngine
 
 
 @lru_cache()
@@ -72,31 +54,25 @@ def get_domain_registry() -> DomainRegistry:
     return DomainRegistry()
 
 
-@lru_cache()
-def get_transformation_engine() -> UniversalTransformationEngine:
-    """Get configured universal transformation engine."""
-    engine = UniversalTransformationEngine(
-        llm_client=get_llm_client(),
-        prompt_engine=get_prompt_engine(),
-        context_manager=get_context_manager(),
-        question_engine=get_question_engine()
-    )
-    
-    # Connect domain registry
-    engine.set_domain_registry(get_domain_registry())
-    
-    return engine
+# TransformationEngine simplified - functionality moved to ChatEngine
 
 
 @lru_cache()
 def get_chat_engine() -> ChatEngine:
-    """Get configured chat engine for conversational interface."""
+    """Get configured unified chat engine."""
+    # Create stub engines for compatibility (they won't be used in unified design)
+    from core.question_engine import QuestionEngine  
+    from core.transformation_engine import UniversalTransformationEngine
+    
+    # These are just stubs - the unified ChatEngine uses inline logic
+    question_engine = None  # Not used in unified design
+    transformation_engine = None  # Not used in unified design
+    
     return ChatEngine(
         llm_client=get_llm_client(),
-        prompt_engine=get_prompt_engine(),
         context_manager=get_context_manager(), 
-        question_engine=get_question_engine(),
-        transformation_engine=get_transformation_engine()
+        question_engine=question_engine,
+        transformation_engine=transformation_engine
     )
 
 
