@@ -84,6 +84,8 @@ def create_app() -> FastAPI:
         tags=["projects"]
     )
     
+# Enhanced chat functionality is now unified in the main chat router
+    
     # Health check endpoint
     @app.get("/health")
     async def health_check():

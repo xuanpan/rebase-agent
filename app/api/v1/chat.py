@@ -35,9 +35,18 @@ class ChatMessageResponse(BaseModel):
     suggested_responses: List[str]
     current_phase: str
     progress_percentage: float
+    
+    # Enhanced LLM-driven fields
+    collected_data: Optional[Dict[str, Any]] = None
+    data_completeness: float = 0.0
+    missing_critical_info: List[str] = []
+    extraction_confidence: float = 0.0
+    next_question_reasoning: str = ""
+    
+    # Original fields
     action_required: Optional[str] = None
     structured_data: Optional[Dict[str, Any]] = None
-    confidence_level: float
+    confidence_level: float = 0.0
 
 
 class ConversationSessionResponse(BaseModel):
@@ -45,7 +54,14 @@ class ConversationSessionResponse(BaseModel):
     domain_type: Optional[str]
     current_phase: str
     progress_percentage: float
-    discovered_facts: Dict[str, Any]
+    
+    # Enhanced fields
+    collected_business_data: Optional[Dict[str, Any]] = None
+    data_completeness: float = 0.0
+    missing_categories: List[str] = []
+    
+    # Original fields  
+    discovered_facts: Dict[str, Any] = {}
     conversation_length: int
     started_at: str
     last_updated: str
@@ -92,6 +108,11 @@ async def send_message(
             suggested_responses=response.suggested_responses,
             current_phase=response.current_phase,
             progress_percentage=response.progress_percentage,
+            collected_data=response.collected_data,
+            data_completeness=response.data_completeness,
+            missing_critical_info=response.missing_critical_info,
+            extraction_confidence=response.extraction_confidence,
+            next_question_reasoning=response.next_question_reasoning,
             action_required=response.action_required,
             structured_data=response.structured_data,
             confidence_level=response.confidence_level
@@ -126,12 +147,27 @@ async def get_conversation_summary(
                 detail=summary["error"]
             )
         
+        # Get enhanced data if available
+        collected_business_data = None
+        data_completeness = 0.0
+        missing_categories = []
+        
+        # Check if we have enhanced conversation data
+        if hasattr(chat_engine, 'session_business_data') and session_id in chat_engine.session_business_data:
+            business_data = chat_engine.session_business_data[session_id]
+            collected_business_data = business_data.to_dict()
+            data_completeness = business_data.get_completeness_score()
+            missing_categories = business_data.get_missing_categories()
+        
         return ConversationSessionResponse(
             session_id=summary["session_id"],
             domain_type=summary.get("domain_type"),
             current_phase=summary["current_phase"], 
             progress_percentage=summary["progress_percentage"],
-            discovered_facts=summary["discovered_facts"],
+            collected_business_data=collected_business_data,
+            data_completeness=data_completeness,
+            missing_categories=missing_categories,
+            discovered_facts=summary.get("discovered_facts", {}),
             conversation_length=summary["conversation_length"],
             started_at=summary["started_at"],
             last_updated=summary["last_updated"]

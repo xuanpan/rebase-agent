@@ -100,6 +100,9 @@ def get_chat_engine() -> ChatEngine:
     )
 
 
+# Enhanced functionality is now unified in the main ChatEngine
+
+
 # Health check dependencies
 async def check_llm_health() -> dict:
     """Check health of LLM providers."""
