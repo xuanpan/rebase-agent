@@ -8,7 +8,6 @@ and business discovery with the universal transformation engine.
 from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass, asdict
 from enum import Enum
-import uuid
 import json
 from datetime import datetime, timezone
 
@@ -21,88 +20,254 @@ except ImportError:
 
 from ..llm_client import LLMClient
 from ..context_manager import ContextManager
-from ..question_engine import QuestionEngine
-from ..transformation_engine import UniversalTransformationEngine, TransformationPhase
+
+
+@dataclass
+class DiscoveryCategory:
+    """Represents a discovery category with progress tracking and detailed fields."""
+    name: str
+    progress: float = 0.0  # 0.0 to 1.0
+    completion_status: str = "not_started"  # "not_started" | "in_progress" | "complete"
+    summary: str = ""
+    fields: Dict[str, Any] = None
+    
+    def __post_init__(self):
+        if self.fields is None:
+            self.fields = {}
 
 
 @dataclass
 class CollectedBusinessData:
-    """Unified structured business data collection model."""
+    """Hierarchical business data collection with parent categories and child fields."""
     
-    # Business Context
-    business_goals: List[str] = None
-    pain_points: List[Dict[str, Any]] = None  # {"description": str, "impact": str, "frequency": str}
-    success_criteria: List[str] = None
-    key_metrics: List[str] = None  # Performance metrics and KPIs
-    
-    # Stakeholder Information
-    decision_makers: List[str] = None
-    affected_users: List[str] = None
-    technical_contacts: List[str] = None
-    
-    # Financial Context
-    current_costs: Dict[str, float] = None  # {"maintenance": 10000, "lost_productivity": 5000}
-    budget_range: Dict[str, float] = None   # {"min": 50000, "max": 150000}
-    roi_expectations: Dict[str, Any] = None # {"target_percentage": 200, "payback_months": 12}
-    
-    # Technical Context
-    current_technology: Dict[str, str] = None  # {"framework": "React", "version": "16.8"}
-    team_info: Dict[str, Any] = None          # {"size": 5, "experience": "intermediate"}
-    system_scale: Dict[str, Any] = None       # {"users": 1000, "requests_per_day": 100000}
-    
-    # Timeline & Constraints
-    timeline_constraints: Dict[str, Any] = None  # {"must_complete_by": "2024-06-01", "flexibility": "moderate"}
-    regulatory_requirements: List[str] = None
-    business_constraints: List[str] = None
-    
-    # Urgency & Risk
-    urgency_factors: List[Dict[str, str]] = None  # {"factor": "security", "severity": "high"}
-    risk_tolerance: str = None  # "low" | "moderate" | "high"
+    # Parent Categories (6 core discovery areas)
+    business_goals: DiscoveryCategory = None
+    pain_points: DiscoveryCategory = None  
+    key_metrics: DiscoveryCategory = None
+    constraints: DiscoveryCategory = None
+    stakeholders: DiscoveryCategory = None
+    urgency: DiscoveryCategory = None
     
     def __post_init__(self):
-        """Initialize empty lists/dicts as needed."""
-        for field_name, field_type in self.__annotations__.items():
-            if getattr(self, field_name) is None:
-                if 'List' in str(field_type):
-                    setattr(self, field_name, [])
-                elif 'Dict' in str(field_type):
-                    setattr(self, field_name, {})
+        """Initialize discovery categories with their child fields."""
+        
+        # Initialize Business Goals category
+        if self.business_goals is None:
+            self.business_goals = DiscoveryCategory(
+                name="Business Goals",
+                fields={
+                    "primary_objectives": [],      # Main business goals
+                    "success_criteria": [],       # How success is measured
+                    "kpis": [],                   # Key performance indicators
+                    "timeline_goals": {},         # {"short_term": [], "long_term": []}
+                    "strategic_alignment": ""     # How this fits company strategy
+                }
+            )
+        
+        # Initialize Pain Points category
+        if self.pain_points is None:
+            self.pain_points = DiscoveryCategory(
+                name="Pain Points",
+                fields={
+                    "current_problems": [],       # [{"description": str, "impact": str, "frequency": str}]
+                    "technical_debt": [],         # Technical issues
+                    "process_inefficiencies": [], # Workflow problems
+                    "user_complaints": [],        # User-reported issues
+                    "cost_drains": []            # Areas causing financial loss
+                }
+            )
+        
+        # Initialize Key Metrics category  
+        if self.key_metrics is None:
+            self.key_metrics = DiscoveryCategory(
+                name="Key Metrics",
+                fields={
+                    "performance_metrics": [],    # Response time, throughput, etc.
+                    "business_metrics": [],       # Revenue, conversion, etc.
+                    "user_metrics": [],          # User satisfaction, adoption, etc.
+                    "operational_metrics": [],   # Uptime, error rates, etc.
+                    "baseline_measurements": {}  # Current metric values
+                }
+            )
+        
+        # Initialize Constraints category
+        if self.constraints is None:
+            self.constraints = DiscoveryCategory(
+                name="Constraints",
+                fields={
+                    "timeline_constraints": {},   # {"hard_deadline": str, "preferred_timeline": str}
+                    "budget_constraints": {},     # {"max_budget": float, "budget_flexibility": str}
+                    "technical_constraints": [],  # Technical limitations
+                    "regulatory_requirements": [], # Compliance needs
+                    "business_constraints": [],   # Organizational limitations
+                    "resource_constraints": {}    # {"team_size": int, "expertise_gaps": []}
+                }
+            )
+        
+        # Initialize Stakeholders category
+        if self.stakeholders is None:
+            self.stakeholders = DiscoveryCategory(
+                name="Stakeholders",
+                fields={
+                    "decision_makers": [],        # [{"name": str, "role": str, "influence": str}]
+                    "technical_team": [],         # Engineering stakeholders
+                    "business_users": [],         # End users and business stakeholders
+                    "external_stakeholders": [], # Customers, partners, vendors
+                    "project_sponsors": [],       # Executive sponsors
+                    "communication_plan": {}      # How to keep stakeholders informed
+                }
+            )
+        
+        # Initialize Urgency category
+        if self.urgency is None:
+            self.urgency = DiscoveryCategory(
+                name="Urgency",
+                fields={
+                    "urgency_level": "",          # "low" | "moderate" | "high" | "critical"
+                    "urgency_drivers": [],        # [{"factor": str, "impact": str, "timeline": str}]
+                    "risk_tolerance": "",         # "low" | "moderate" | "high"
+                    "competitive_pressure": {},   # Market/competition factors
+                    "regulatory_deadlines": [],   # Compliance-driven urgency
+                    "business_impact": {}         # Cost of delay, opportunity cost
+                }
+            )
     
-    def get_completeness_score(self) -> float:
-        """Calculate how complete the collected data is (0.0 to 1.0)."""
-        total_fields = len(self.__annotations__)
+    def get_category_progress(self, category_name: str) -> float:
+        """Calculate progress for a specific discovery category."""
+        category = getattr(self, category_name.lower().replace(" ", "_"))
+        if not category or not category.fields:
+            return 0.0
+        
+        total_fields = len(category.fields)
         completed_fields = 0
         
-        for field_name in self.__annotations__.keys():
-            value = getattr(self, field_name)
-            if value:  # Not None and not empty
-                if isinstance(value, (list, dict)) and len(value) > 0:
+        for field_name, field_value in category.fields.items():
+            if field_value:  # Not None and not empty
+                if isinstance(field_value, list) and len(field_value) > 0:
                     completed_fields += 1
-                elif isinstance(value, str) and value.strip():
+                elif isinstance(field_value, dict) and len(field_value) > 0:
                     completed_fields += 1
-                elif isinstance(value, (int, float)) and value > 0:
+                elif isinstance(field_value, str) and field_value.strip():
                     completed_fields += 1
         
-        return completed_fields / total_fields
+        progress = completed_fields / total_fields if total_fields > 0 else 0.0
+        category.progress = progress
+        
+        # Update completion status
+        if progress == 0.0:
+            category.completion_status = "not_started"
+        elif progress < 1.0:
+            category.completion_status = "in_progress"
+        else:
+            category.completion_status = "complete"
+        
+        return progress
+    
+    def get_overall_completeness_score(self) -> float:
+        """Calculate overall discovery completeness across all categories."""
+        categories = ["business_goals", "pain_points", "key_metrics", "constraints", "stakeholders", "urgency"]
+        total_progress = sum(self.get_category_progress(cat) for cat in categories)
+        return total_progress / len(categories)
     
     def get_missing_categories(self) -> List[str]:
-        """Get categories of information that are still missing or incomplete."""
+        """Get categories that need more information."""
         missing = []
+        categories = ["business_goals", "pain_points", "key_metrics", "constraints", "stakeholders", "urgency"]
         
-        if not self.business_goals or not self.pain_points:
-            missing.append("business_context")
-        if not self.decision_makers or not self.affected_users:
-            missing.append("stakeholder_mapping")
-        if not self.current_costs or not self.budget_range:
-            missing.append("financial_context")
-        if not self.current_technology or not self.team_info:
-            missing.append("technical_context")
-        if not self.timeline_constraints:
-            missing.append("timeline_constraints")
-        if not self.urgency_factors or not self.risk_tolerance:
-            missing.append("risk_assessment")
+        for cat_name in categories:
+            progress = self.get_category_progress(cat_name)
+            if progress < 0.5:  # Less than 50% complete
+                missing.append(cat_name)
         
         return missing
+    
+    def update_category_field(self, category_name: str, field_name: str, value: Any):
+        """Update a specific field within a category."""
+        category = getattr(self, category_name.lower().replace(" ", "_"))
+        if category and category.fields:
+            if isinstance(value, list) and field_name in category.fields and isinstance(category.fields[field_name], list):
+                category.fields[field_name].extend(value)
+            else:
+                category.fields[field_name] = value
+            
+            # Update progress after modification
+            self.get_category_progress(category_name)
+            
+            # Generate category summary
+            self._update_category_summary(category_name)
+    
+    def _update_category_summary(self, category_name: str):
+        """Generate a human-readable summary for a category based on its fields."""
+        category = getattr(self, category_name.lower().replace(" ", "_"))
+        if not category:
+            return
+        
+        if category_name == "business_goals":
+            objectives = category.fields.get("primary_objectives", [])
+            kpis = category.fields.get("kpis", [])
+            summary_parts = []
+            if objectives:
+                summary_parts.append(f"{len(objectives)} primary objectives")
+            if kpis:
+                summary_parts.append(f"{len(kpis)} KPIs defined")
+            category.summary = ", ".join(summary_parts) if summary_parts else "No goals defined yet"
+            
+        elif category_name == "pain_points":
+            problems = category.fields.get("current_problems", [])
+            tech_debt = category.fields.get("technical_debt", [])
+            summary_parts = []
+            if problems:
+                summary_parts.append(f"{len(problems)} current problems")
+            if tech_debt:
+                summary_parts.append(f"{len(tech_debt)} technical issues")
+            category.summary = ", ".join(summary_parts) if summary_parts else "No pain points identified"
+            
+        elif category_name == "stakeholders":
+            decision_makers = category.fields.get("decision_makers", [])
+            team = category.fields.get("technical_team", [])
+            users = category.fields.get("business_users", [])
+            total_stakeholders = len(decision_makers) + len(team) + len(users)
+            category.summary = f"{total_stakeholders} stakeholders identified" if total_stakeholders > 0 else "No stakeholders identified"
+            
+        elif category_name == "urgency":
+            level = category.fields.get("urgency_level", "")
+            drivers = category.fields.get("urgency_drivers", [])
+            if level:
+                driver_text = f" with {len(drivers)} drivers" if drivers else ""
+                category.summary = f"{level.title()} urgency{driver_text}"
+            else:
+                category.summary = "Urgency level not defined"
+        
+        # Add summaries for other categories as needed
+        elif category_name in ["key_metrics", "constraints"]:
+            field_count = sum(1 for field_value in category.fields.values() 
+                            if field_value and (
+                                (isinstance(field_value, list) and len(field_value) > 0) or
+                                (isinstance(field_value, dict) and len(field_value) > 0) or
+                                (isinstance(field_value, str) and field_value.strip())
+                            ))
+            category.summary = f"{field_count} fields completed" if field_count > 0 else "Not started"
+    
+    def get_discovery_summary(self) -> Dict[str, Any]:
+        """Get a complete discovery summary for display."""
+        categories = ["business_goals", "pain_points", "key_metrics", "constraints", "stakeholders", "urgency"]
+        summary = {
+            "overall_progress": self.get_overall_completeness_score(),
+            "categories": {}
+        }
+        
+        for cat_name in categories:
+            category = getattr(self, cat_name.lower().replace(" ", "_"))
+            if category:
+                summary["categories"][cat_name] = {
+                    "name": category.name,
+                    "progress": category.progress,
+                    "status": category.completion_status,
+                    "summary": category.summary,
+                    "fields": category.fields
+                }
+        
+        return summary
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -117,8 +282,8 @@ class ChatResponse:
     current_phase: str
     progress_percentage: float
     
-    # Enhanced LLM-driven fields
-    collected_data: Optional[Dict[str, Any]] = None
+    # Enhanced LLM-driven fields  
+    discovery_summary: Optional[Dict[str, Any]] = None
     data_completeness: float = 0.0
     missing_critical_info: List[str] = None
     extraction_confidence: float = 0.0
@@ -126,7 +291,6 @@ class ChatResponse:
     
     # Original fields
     action_required: Optional[str] = None
-    structured_data: Optional[Dict[str, Any]] = None
     confidence_level: float = 0.0
     
     def __post_init__(self):
@@ -160,17 +324,10 @@ class ChatEngine:
     def __init__(
         self,
         llm_client: LLMClient,
-        context_manager: ContextManager,
-        question_engine: QuestionEngine,
-        transformation_engine: UniversalTransformationEngine
+        context_manager: ContextManager
     ):
         self.llm_client = llm_client
         self.context_manager = context_manager
-        self.question_engine = question_engine
-        self.transformation_engine = transformation_engine
-        
-        # Set up transformation engine connection
-        self.transformation_engine.context_manager = context_manager
         
         # In-memory storage for collected business data (in production, this would be persistent)
         self.session_business_data: Dict[str, CollectedBusinessData] = {}
@@ -188,11 +345,15 @@ class ChatEngine:
         """Start a new transformation conversation."""
         
         try:
-            # Create new session
-            session_id = await self.transformation_engine.start_transformation_analysis(
-                user_request=initial_message,
-                user_id=user_context.get("user_id") if user_context else None
+            # Create new session directly using context manager
+            session_id = self.context_manager.create_session(
+                initial_message=initial_message,
+                user_id=user_context.get("user_id") if user_context else None,
+                domain_type="framework_migration"  # Default, can be refined later
             )
+            
+            # Initialize business data collection for this session
+            self.session_business_data[session_id] = CollectedBusinessData()
             
             # Generate initial response
             response = await self._generate_initial_response(initial_message, session_id)
@@ -279,13 +440,12 @@ class ChatEngine:
                 suggested_responses=suggested_responses,
                 current_phase=next_phase,
                 progress_percentage=progress,
-                collected_data=collected_data.to_dict(),
+                discovery_summary=collected_data.get_discovery_summary(),
                 data_completeness=llm_decision.get("completeness_score", 0.0),
                 missing_critical_info=llm_decision.get("missing_critical_info", []),
                 extraction_confidence=llm_decision.get("confidence", 0.0),
                 next_question_reasoning=llm_decision.get("reasoning", "LLM-driven discovery"),
                 action_required=action_required,
-                structured_data=collected_data.to_dict(),
                 confidence_level=llm_decision.get("confidence", 0.0)
             )
             
@@ -301,25 +461,37 @@ class ChatEngine:
                 suggested_responses=["Let me rephrase that", "Can you help me understand?"],
                 current_phase="error",
                 progress_percentage=0.0,
+                discovery_summary=None,
                 confidence_level=0.0
             )
+    
+    async def get_discovery_summary(self, session_id: str) -> Dict[str, Any]:
+        """Get the discovery summary for a session."""
+        collected_data = self.session_business_data.get(session_id)
+        if collected_data:
+            return collected_data.get_discovery_summary()
+        return {}
     
     async def get_conversation_summary(self, session_id: str) -> Dict[str, Any]:
         """Get a summary of the conversation and current status."""
         
-        transformation_status = await self.transformation_engine.get_transformation_status(session_id)
         context = self.context_manager.get_context(session_id)
         
         if not context:
             return {"error": "Session not found"}
         
+        # Get business data if available
+        collected_data = self.session_business_data.get(session_id)
+        overall_progress = collected_data.get_overall_completeness_score() * 100 if collected_data else 0.0
+        
         return {
             "session_id": session_id,
-            "domain_type": transformation_status.domain_type,
-            "current_phase": transformation_status.current_phase.value,
-            "progress_percentage": transformation_status.completion_percentage,
-            "discovered_facts": context.discovered_facts,
-            "business_case": transformation_status.business_case,
+            "domain_type": context.domain_type or "framework_migration",
+            "current_phase": context.current_phase,
+            "progress_percentage": overall_progress,
+            "discovery_summary": collected_data.get_discovery_summary() if collected_data else {},
+            "data_completeness": overall_progress / 100.0,
+            "missing_categories": collected_data.get_missing_categories() if collected_data else [],
             "conversation_length": len(context.conversation_history),
             "started_at": context.created_at.isoformat(),
             "last_updated": context.updated_at.isoformat()
@@ -463,7 +635,7 @@ class ChatEngine:
             current_phase=phase,
             progress_percentage=progress,
             action_required=action_required,
-            structured_data=structured_data,
+            discovery_summary=None,
             confidence_level=message_analysis.confidence
         )
     
@@ -554,7 +726,7 @@ class ChatEngine:
                 print(f"LLM discovery decision failed, using fallback: {e}")
             
             # Fallback decision logic
-            completeness = collected_data.get_completeness_score()
+            completeness = collected_data.get_overall_completeness_score()
             if completeness >= 0.7:
                 return {
                     "status": "complete",
@@ -581,14 +753,23 @@ class ChatEngine:
         
         completeness = llm_decision.get("completeness_score", 0.0)
         
+        # Get some basic stats from the hierarchical categories
+        goals_count = len(collected_data.business_goals.fields.get("primary_objectives", [])) if collected_data.business_goals else 0
+        pain_count = len(collected_data.pain_points.fields.get("current_problems", [])) if collected_data.pain_points else 0
+        stakeholder_count = (
+            len(collected_data.stakeholders.fields.get("decision_makers", [])) +
+            len(collected_data.stakeholders.fields.get("technical_team", [])) +
+            len(collected_data.stakeholders.fields.get("business_users", []))
+        ) if collected_data.stakeholders else 0
+        
         response = f"""
 Perfect! I've gathered enough information to move forward. Based on our conversation, I can see we have {completeness:.0%} of the key information needed.
 
 Here's what I've captured:
-• Business Goals: {len(collected_data.business_goals)} identified
-• Pain Points: {len(collected_data.pain_points)} documented  
-• Stakeholders: {len(collected_data.decision_makers)} decision makers mapped
-• Technical Context: {'Complete' if collected_data.current_technology else 'Partial'}
+• Business Goals: {goals_count} objectives identified
+• Pain Points: {pain_count} issues documented  
+• Stakeholders: {stakeholder_count} stakeholders mapped
+• Discovery Status: {len([cat for cat in ['business_goals', 'pain_points', 'key_metrics', 'constraints', 'stakeholders', 'urgency'] if getattr(collected_data, cat) and getattr(collected_data, cat).progress > 0])}/6 categories started
 
 Let me now analyze your current system to provide accurate ROI calculations and recommendations. This will take a moment...
         """.strip()
@@ -602,108 +783,157 @@ Let me now analyze your current system to provide accurate ROI calculations and 
         collected_data: CollectedBusinessData,
         llm_decision: Dict[str, Any]
     ) -> CollectedBusinessData:
-        """Update collected data with LLM response, handling both extracted_data and completion summary."""
+        """Update collected data with LLM response, using hierarchical category model."""
         
         # Handle completion summary (when status = "complete")
         if llm_decision.get("status") == "complete":
             summary = llm_decision.get("summary", {})
-            
-            # Map LLM summary fields to our data model
-            if "business_goals" in summary:
-                goals = summary["business_goals"]
-                if isinstance(goals, list):
-                    collected_data.business_goals.extend(goals)
-                elif isinstance(goals, str):
-                    collected_data.business_goals.append(goals)
-            
-            if "pain_points" in summary:
-                pain_points = summary["pain_points"]
-                if isinstance(pain_points, list):
-                    for point in pain_points:
-                        if isinstance(point, str):
-                            collected_data.pain_points.append({
-                                "description": point,
-                                "impact": "unknown", 
-                                "frequency": "unknown"
-                            })
-                        elif isinstance(point, dict):
-                            collected_data.pain_points.append(point)
-            
-            # Map key_metrics → key_metrics field
-            if "key_metrics" in summary:
-                metrics = summary["key_metrics"]
-                if isinstance(metrics, list):
-                    collected_data.key_metrics.extend(metrics)
-                elif isinstance(metrics, str):
-                    collected_data.key_metrics.append(metrics)
-            
-            # Map constraints → timeline_constraints and business_constraints
-            if "constraints" in summary:
-                constraints = summary["constraints"]
-                if isinstance(constraints, list):
-                    for constraint in constraints:
-                        if "timeline" in str(constraint).lower() or "time" in str(constraint).lower():
-                            collected_data.timeline_constraints["constraint"] = constraint
-                        else:
-                            collected_data.business_constraints.append(constraint)
-            
-            # Map stakeholders → decision_makers, affected_users, technical_contacts
-            if "stakeholders" in summary:
-                stakeholders = summary["stakeholders"]
-                if isinstance(stakeholders, list):
-                    for stakeholder in stakeholders:
-                        # Simple heuristic to categorize stakeholders
-                        if any(role in str(stakeholder).lower() for role in ["cto", "manager", "director", "vp"]):
-                            collected_data.decision_makers.append(stakeholder)
-                        elif any(role in str(stakeholder).lower() for role in ["dev", "engineer", "tech"]):
-                            collected_data.technical_contacts.append(stakeholder)
-                        else:
-                            collected_data.affected_users.append(stakeholder)
-            
-            # Map urgency → urgency_factors and risk_tolerance
-            if "urgency" in summary:
-                urgency = summary["urgency"]
-                if urgency in ["low", "moderate", "high"]:
-                    collected_data.risk_tolerance = urgency
-                collected_data.urgency_factors.append({
-                    "factor": "business_priority",
-                    "severity": urgency
-                })
+            self._process_completion_summary(summary, collected_data)
         
         # Handle incremental extracted_data (during discovery)
         extracted = llm_decision.get("extracted_data", {})
         if extracted:
-            # Update business goals
-            if "business_goals" in extracted:
-                new_goals = extracted["business_goals"]
-                if isinstance(new_goals, list):
-                    collected_data.business_goals.extend(new_goals)
-                elif isinstance(new_goals, str):
-                    collected_data.business_goals.append(new_goals)
-            
-            # Update pain points
-            if "pain_points" in extracted:
-                pain_points = extracted["pain_points"]
-                if isinstance(pain_points, list):
-                    for point in pain_points:
-                        if isinstance(point, str):
-                            collected_data.pain_points.append({
-                                "description": point,
-                                "impact": "unknown",
-                                "frequency": "unknown"
-                            })
-                        elif isinstance(point, dict):
-                            collected_data.pain_points.append(point)
-            
-            # Update stakeholders
-            if "stakeholders" in extracted:
-                stakeholders = extracted["stakeholders"]
-                if isinstance(stakeholders, list):
-                    collected_data.decision_makers.extend(stakeholders)
-                elif isinstance(stakeholders, str):
-                    collected_data.decision_makers.append(stakeholders)
+            self._process_extracted_data(extracted, collected_data)
         
         return collected_data
+    
+    def _process_completion_summary(self, summary: Dict[str, Any], collected_data: CollectedBusinessData):
+        """Process completion summary data into hierarchical categories."""
+        
+        # Business goals processing
+        if "business_goals" in summary:
+            goals = summary["business_goals"]
+            if isinstance(goals, list):
+                collected_data.update_category_field("business_goals", "primary_objectives", goals)
+            elif isinstance(goals, str):
+                collected_data.update_category_field("business_goals", "primary_objectives", [goals])
+        
+        # Pain points processing
+        if "pain_points" in summary:
+            pain_points = summary["pain_points"]
+            if isinstance(pain_points, list):
+                for point in pain_points:
+                    if isinstance(point, str):
+                        collected_data.update_category_field("pain_points", "current_problems", [point])
+                    elif isinstance(point, dict) and "description" in point:
+                        collected_data.update_category_field("pain_points", "current_problems", [point["description"]])
+        
+        # Key metrics processing
+        if "key_metrics" in summary:
+            metrics = summary["key_metrics"]
+            if isinstance(metrics, list):
+                collected_data.update_category_field("key_metrics", "performance_metrics", metrics)
+            elif isinstance(metrics, str):
+                collected_data.update_category_field("key_metrics", "performance_metrics", [metrics])
+        
+        # Constraints processing
+        if "constraints" in summary:
+            constraints = summary["constraints"]
+            if isinstance(constraints, list):
+                for constraint in constraints:
+                    if isinstance(constraint, str):
+                        # Categorize constraint type
+                        if "timeline" in constraint.lower() or "deadline" in constraint.lower():
+                            collected_data.update_category_field("constraints", "timeline_constraints", [constraint])
+                        elif "budget" in constraint.lower() or "cost" in constraint.lower():
+                            collected_data.update_category_field("constraints", "budget_constraints", [constraint])
+                        elif "regulatory" in constraint.lower() or "compliance" in constraint.lower():
+                            collected_data.update_category_field("constraints", "regulatory_constraints", [constraint])
+                        else:
+                            collected_data.update_category_field("constraints", "business_constraints", [constraint])
+                    elif isinstance(constraint, dict):
+                        constraint_type = constraint.get("type", "business")
+                        field_name = f"{constraint_type}_constraints"
+                        if field_name in collected_data.constraints.fields:
+                            collected_data.update_category_field("constraints", field_name, [constraint.get("description", "")])
+        
+        # Stakeholders processing
+        if "stakeholders" in summary:
+            stakeholders = summary["stakeholders"]
+            if isinstance(stakeholders, list):
+                for stakeholder in stakeholders:
+                    if isinstance(stakeholder, str):
+                        # Categorize stakeholder type
+                        if any(role in stakeholder.lower() for role in ["cto", "manager", "director", "vp", "ceo", "lead"]):
+                            collected_data.update_category_field("stakeholders", "decision_makers", [stakeholder])
+                        elif any(role in stakeholder.lower() for role in ["dev", "engineer", "tech", "architect"]):
+                            collected_data.update_category_field("stakeholders", "technical_team", [stakeholder])
+                        else:
+                            collected_data.update_category_field("stakeholders", "business_users", [stakeholder])
+                    elif isinstance(stakeholder, dict):
+                        stakeholder_type = stakeholder.get("type", "business_users")
+                        field_name = stakeholder_type if stakeholder_type in collected_data.stakeholders.fields else "business_users"
+                        collected_data.update_category_field("stakeholders", field_name, [stakeholder.get("name", "")])
+        
+        # Urgency processing
+        if "urgency" in summary:
+            urgency = summary["urgency"]
+            if isinstance(urgency, str) and urgency in ["low", "moderate", "high"]:
+                collected_data.update_category_field("urgency", "urgency_level", urgency)
+                collected_data.update_category_field("urgency", "urgency_drivers", ["Business priority"])
+            elif isinstance(urgency, dict):
+                for key, value in urgency.items():
+                    if key in collected_data.urgency.fields:
+                        collected_data.update_category_field("urgency", key, value)
+    
+    def _process_extracted_data(self, extracted: Dict[str, Any], collected_data: CollectedBusinessData):
+        """Process incremental extracted data into hierarchical categories."""
+        
+        # Direct field mapping for simple cases
+        simple_mappings = {
+            "business_goals": ("business_goals", "primary_objectives"),
+            "key_metrics": ("key_metrics", "performance_metrics")
+        }
+        
+        for field, (category, target_field) in simple_mappings.items():
+            if field in extracted:
+                values = extracted[field]
+                if isinstance(values, list):
+                    collected_data.update_category_field(category, target_field, values)
+                elif isinstance(values, str):
+                    collected_data.update_category_field(category, target_field, [values])
+        
+        # Complex field processing
+        if "constraints" in extracted:
+            constraints = extracted["constraints"]
+            if isinstance(constraints, list):
+                for constraint in constraints:
+                    if isinstance(constraint, str):
+                        collected_data.update_category_field("constraints", "business_constraints", [constraint])
+                    elif isinstance(constraint, dict):
+                        constraint_type = constraint.get("type", "business")
+                        field_name = f"{constraint_type}_constraints"
+                        if field_name in collected_data.constraints.fields:
+                            collected_data.update_category_field("constraints", field_name, [constraint.get("description", "")])
+        
+        if "stakeholders" in extracted:
+            stakeholders = extracted["stakeholders"]
+            if isinstance(stakeholders, list):
+                for stakeholder in stakeholders:
+                    if isinstance(stakeholder, str):
+                        collected_data.update_category_field("stakeholders", "business_users", [stakeholder])
+                    elif isinstance(stakeholder, dict):
+                        stakeholder_type = stakeholder.get("type", "business_users")
+                        field_name = stakeholder_type if stakeholder_type in collected_data.stakeholders.fields else "business_users"
+                        collected_data.update_category_field("stakeholders", field_name, [stakeholder.get("name", "")])
+        
+        if "pain_points" in extracted:
+            pain_points = extracted["pain_points"]
+            if isinstance(pain_points, list):
+                for point in pain_points:
+                    if isinstance(point, str):
+                        collected_data.update_category_field("pain_points", "current_problems", [point])
+                    elif isinstance(point, dict) and "description" in point:
+                        collected_data.update_category_field("pain_points", "current_problems", [point["description"]])
+        
+        if "urgency" in extracted:
+            urgency = extracted["urgency"]
+            if isinstance(urgency, str) and urgency in ["low", "moderate", "high"]:
+                collected_data.update_category_field("urgency", "urgency_level", urgency)
+            elif isinstance(urgency, dict):
+                for key, value in urgency.items():
+                    if key in collected_data.urgency.fields:
+                        collected_data.update_category_field("urgency", key, value)
     
 
     

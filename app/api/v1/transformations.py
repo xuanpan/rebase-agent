@@ -1,8 +1,7 @@
 """
-Transformations API - Direct transformation analysis endpoints.
+Transformations API - Simple transformation endpoints using unified ChatEngine.
 
-Provides structured API endpoints for transformation analysis,
-business case generation, and implementation planning.
+These endpoints redirect transformation requests to use the unified chat interface.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -10,8 +9,8 @@ from typing import Dict, Any, List, Optional
 from pydantic import BaseModel
 from loguru import logger
 
-from core.transformation_engine import UniversalTransformationEngine, TransformationResult
-from app.dependencies import get_transformation_engine
+from core.conversation.chat_engine import ChatEngine
+from app.dependencies import get_chat_engine
 
 
 router = APIRouter(prefix="/transformations")
@@ -23,34 +22,33 @@ class TransformationRequest(BaseModel):
     user_id: Optional[str] = None
 
 
-class BusinessCaseResponse(BaseModel):
-    total_investment: float
-    annual_benefits: float
-    roi_percentage: float
-    payback_period_months: float
-    confidence_level: float
-    recommendation: str
-    cost_breakdown: List[Dict[str, Any]]
-    benefits_breakdown: List[Dict[str, Any]]
-    risks: List[Dict[str, Any]]
+class TransformationResult(BaseModel):
+    session_id: str
+    status: str
+    message: str
 
 
 @router.post("/analyze")
 async def analyze_transformation(
     request: TransformationRequest,
-    engine: UniversalTransformationEngine = Depends(get_transformation_engine)
+    chat_engine: ChatEngine = Depends(get_chat_engine)
 ):
-    """Start a new transformation analysis (non-conversational)."""
+    """Start a new transformation analysis using the unified chat engine."""
     try:
-        session_id = await engine.start_transformation_analysis(
-            user_request=request.description,
-            user_id=request.user_id
+        # Use the unified chat engine for transformation analysis
+        session_id = f"transform_{request.user_id or 'anonymous'}"
+        
+        # Start a conversation session with transformation focus
+        response = await chat_engine.start_conversation(
+            session_id=session_id,
+            user_message=f"I need help with a transformation: {request.description}"
         )
         
         return {
             "session_id": session_id,
-            "message": "Transformation analysis started",
-            "next_step": "Use /chat/message to continue with conversational analysis"
+            "message": "Transformation analysis started using unified chat interface",
+            "response": response.content,
+            "next_step": "Use /chat/message to continue the conversation"
         }
         
     except Exception as e:
@@ -64,28 +62,20 @@ async def analyze_transformation(
 @router.get("/sessions/{session_id}/status")
 async def get_transformation_status(
     session_id: str,
-    engine: UniversalTransformationEngine = Depends(get_transformation_engine)
+    chat_engine: ChatEngine = Depends(get_chat_engine)
 ):
-    """Get current status of transformation analysis."""
+    """Get current conversation status from the chat engine."""
     try:
-        result = await engine.get_transformation_status(session_id)
+        # Get conversation summary instead of transformation status
+        summary = await chat_engine.get_conversation_summary(session_id)
         
         return {
-            "session_id": result.session_id,
-            "domain_type": result.domain_type,
-            "current_phase": result.current_phase.value,
-            "completion_percentage": result.completion_percentage,
-            "discovery_summary": result.discovery_summary,
-            "technical_assessment": result.technical_assessment,
-            "business_case": result.business_case,
-            "implementation_plan": result.implementation_plan
+            "session_id": session_id,
+            "status": "active",
+            "summary": summary,
+            "message": "Use the unified chat interface for detailed interaction"
         }
         
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
-        )
     except Exception as e:
         logger.error(f"Error getting transformation status: {e}")
         raise HTTPException(
@@ -98,63 +88,26 @@ async def get_transformation_status(
 async def force_phase_transition(
     session_id: str,
     phase: str,
-    engine: UniversalTransformationEngine = Depends(get_transformation_engine)
+    chat_engine: ChatEngine = Depends(get_chat_engine)
 ):
-    """Force transition to a specific phase (admin/testing endpoint)."""
-    try:
-        from core.transformation_engine import TransformationPhase
-        
-        target_phase = TransformationPhase(phase.lower())
-        success = await engine.force_phase_transition(session_id, target_phase)
-        
-        if not success:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Failed to transition phase"
-            )
-        
-        return {
-            "session_id": session_id,
-            "new_phase": phase,
-            "message": f"Successfully transitioned to {phase}"
-        }
-        
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid phase: {phase}"
-        )
-    except Exception as e:
-        logger.error(f"Error forcing phase transition: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to force phase transition: {str(e)}"
-        )
+    """Legacy endpoint - phase transitions now handled through chat interface."""
+    return {
+        "session_id": session_id,
+        "message": f"Phase transitions are now handled through the unified chat interface. Please use /chat/message to guide the conversation to the '{phase}' phase."
+    }
 
 
 @router.get("/detect-domain")
 async def detect_transformation_domain(
-    description: str,
-    engine: UniversalTransformationEngine = Depends(get_transformation_engine)
+    description: str
 ):
-    """Detect the most likely transformation domain for a given description."""
-    try:
-        domain_info = await engine.detect_transformation_domain(description)
-        
-        return {
-            "description": description,
-            "detected_domain": domain_info["domain"],
-            "confidence": domain_info["confidence"],
-            "domain_info": domain_info["info"],
-            "suggested_approach": domain_info["approach"]
-        }
-        
-    except Exception as e:
-        logger.error(f"Error detecting domain: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to detect domain: {str(e)}"
-        )
+    """Simple domain detection - all transformations use unified approach."""
+    return {
+        "description": description,
+        "detected_domain": "unified_business_transformation",
+        "confidence": 1.0,
+        "message": "All transformations now use the unified chat-based approach for better user experience"
+    }
 
 
 @router.get("/health")
@@ -162,11 +115,12 @@ async def transformations_health_check():
     """Health check for transformation functionality."""
     return {
         "status": "healthy",
-        "service": "transformations_api",
+        "service": "transformations_api_unified",
+        "note": "Transformation functionality unified into chat interface",
         "endpoints": [
             "/transformations/analyze",
             "/transformations/detect-domain",
             "/transformations/sessions/{session_id}/status",
-            "/transformations/sessions/{session_id}/force-phase/{phase}"
+            "/transformations/health"
         ]
     }

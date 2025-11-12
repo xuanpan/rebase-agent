@@ -38,6 +38,7 @@ class ChatMessageResponse(BaseModel):
     
     # Enhanced LLM-driven fields
     collected_data: Optional[Dict[str, Any]] = None
+    discovery_summary: Optional[Dict[str, Any]] = None
     data_completeness: float = 0.0
     missing_critical_info: List[str] = []
     extraction_confidence: float = 0.0
@@ -109,6 +110,7 @@ async def send_message(
             current_phase=response.current_phase,
             progress_percentage=response.progress_percentage,
             collected_data=response.collected_data,
+            discovery_summary=response.discovery_summary,
             data_completeness=response.data_completeness,
             missing_critical_info=response.missing_critical_info,
             extraction_confidence=response.extraction_confidence,

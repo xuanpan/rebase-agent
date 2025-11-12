@@ -12,8 +12,6 @@ from loguru import logger
 from .config import Settings, get_settings
 from core.llm_client import LLMClient
 from core.context_manager import ContextManager
-from core.question_engine import QuestionEngine
-from core.transformation_engine import UniversalTransformationEngine
 from core.conversation.chat_engine import ChatEngine
 from domains.domain_registry import DomainRegistry
 
@@ -60,19 +58,10 @@ def get_domain_registry() -> DomainRegistry:
 @lru_cache()
 def get_chat_engine() -> ChatEngine:
     """Get configured unified chat engine."""
-    # Create stub engines for compatibility (they won't be used in unified design)
-    from core.question_engine import QuestionEngine  
-    from core.transformation_engine import UniversalTransformationEngine
-    
-    # These are just stubs - the unified ChatEngine uses inline logic
-    question_engine = None  # Not used in unified design
-    transformation_engine = None  # Not used in unified design
-    
+    # The unified ChatEngine handles all functionality internally
     return ChatEngine(
         llm_client=get_llm_client(),
-        context_manager=get_context_manager(), 
-        question_engine=question_engine,
-        transformation_engine=transformation_engine
+        context_manager=get_context_manager()
     )
 
 

@@ -12,12 +12,10 @@ __author__ = "Rebase Team"
 __email__ = "team@rebase.com"
 
 # Core exports
-from .core.transformation_engine import UniversalTransformationEngine
 from .core.conversation.chat_engine import ChatEngine
 from .domains.base_domain import TransformationDomain
 
 __all__ = [
-    "UniversalTransformationEngine",
     "ChatEngine", 
     "TransformationDomain",
 ]
