@@ -573,7 +573,7 @@ class ChatEngine:
             pain_points = [word for word in pain_indicators if word in message.lower()]
             
             # Determine intent
-            intent = self._classify_intent(message, context)
+            intent = await self._classify_intent(message, context)
             
             return MessageAnalysis(
                 original_message=message,
@@ -597,25 +597,96 @@ class ChatEngine:
                 confidence=0.5
             )
     
-    def _classify_intent(self, message: str, context) -> ConversationIntent:
-        """Classify user intent based on message content and context."""
+    async def _classify_intent(self, message: str, context) -> ConversationIntent:
+        """Classify user intent using LLM with fallback to rule-based approach."""
+        
+        # Build intent classification prompt
+        intent_prompt = f"""
+Classify the user's intent based on their message and conversation context.
+
+USER MESSAGE: "{message}"
+CONVERSATION PHASE: {context.current_phase}
+PREVIOUS MESSAGES: {len(context.conversation_history)} messages exchanged
+
+POSSIBLE INTENTS:
+- START_TRANSFORMATION: User wants to begin a system modernization/migration project
+- ANSWER_QUESTION: User is providing information or answering a discovery question  
+- REQUEST_CLARIFICATION: User wants explanation or clarification about something
+- APPROVE_BUSINESS_CASE: User is approving/accepting a proposed plan or recommendation
+- REQUEST_MORE_INFO: User wants additional details or information
+- GENERAL_CHAT: General conversation not related to transformation
+
+Consider:
+- The actual meaning, not just keywords
+- Context of the conversation phase
+- Cultural and linguistic variations
+- Synonyms and different ways of expressing the same intent
+
+Respond with only the intent name (e.g., "ANSWER_QUESTION").
+"""
+
+        try:
+            response = await self.llm_client.chat_completion([
+                {
+                    "role": "system",
+                    "content": "You are an intent classifier. Analyze the user's message and respond with only the intent classification."
+                },
+                {"role": "user", "content": intent_prompt}
+            ])
+            
+            # Parse LLM response
+            intent_str = response.content.strip().upper()
+            
+            # Map to enum
+            intent_mapping = {
+                "START_TRANSFORMATION": ConversationIntent.START_TRANSFORMATION,
+                "ANSWER_QUESTION": ConversationIntent.ANSWER_QUESTION,
+                "REQUEST_CLARIFICATION": ConversationIntent.REQUEST_CLARIFICATION,
+                "APPROVE_BUSINESS_CASE": ConversationIntent.APPROVE_BUSINESS_CASE,
+                "REQUEST_MORE_INFO": ConversationIntent.REQUEST_MORE_INFO,
+                "GENERAL_CHAT": ConversationIntent.GENERAL_CHAT
+            }
+            
+            if intent_str in intent_mapping:
+                return intent_mapping[intent_str]
+            else:
+                # Fallback if LLM returns unexpected value
+                return self._fallback_intent_classification(message, context)
+                
+        except Exception as e:
+            try:
+                logger.warning(f"LLM intent classification failed, using fallback: {e}")
+            except:
+                print(f"LLM intent classification failed, using fallback: {e}")
+            
+            # Fallback to rule-based approach
+            return self._fallback_intent_classification(message, context)
+    
+    def _fallback_intent_classification(self, message: str, context) -> ConversationIntent:
+        """Fallback rule-based intent classification for when LLM is unavailable."""
         
         message_lower = message.lower()
         
-        # Check for transformation start keywords
-        if any(word in message_lower for word in ["migrate", "convert", "upgrade", "modernize", "transform"]):
+        # Check for transformation start keywords (more comprehensive)
+        transformation_words = ["migrate", "convert", "upgrade", "modernize", "transform", 
+                              "update", "refactor", "rebuild", "rewrite", "improve"]
+        if any(word in message_lower for word in transformation_words):
             return ConversationIntent.START_TRANSFORMATION
         
-        # Check for approval keywords
-        if any(word in message_lower for word in ["yes", "approve", "proceed", "go ahead", "sounds good"]):
+        # Check for approval keywords (more comprehensive)
+        approval_words = ["yes", "approve", "proceed", "go ahead", "sounds good", 
+                         "that works", "okay", "ok", "agreed", "accept", "confirmed"]
+        if any(word in message_lower for word in approval_words):
             return ConversationIntent.APPROVE_BUSINESS_CASE
         
         # Check for clarification requests
-        if any(word in message_lower for word in ["what", "how", "why", "explain", "clarify"]):
+        clarification_words = ["what", "how", "why", "explain", "clarify", "help me understand"]
+        if any(word in message_lower for word in clarification_words):
             return ConversationIntent.REQUEST_CLARIFICATION
         
         # Check for information requests
-        if any(word in message_lower for word in ["more", "details", "tell me", "show me"]):
+        info_words = ["more", "details", "tell me", "show me", "additional", "further"]
+        if any(word in message_lower for word in info_words):
             return ConversationIntent.REQUEST_MORE_INFO
         
         # Default to answering question if we're in discovery phase
