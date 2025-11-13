@@ -24,29 +24,31 @@ from ..context_manager import ContextManager
 
 @dataclass
 class DiscoveryCategory:
-    """Represents a discovery category with progress tracking and detailed fields."""
+    """Represents a discovery category with progress tracking and current vs future state fields."""
     name: str
     progress: float = 0.0  # 0.0 to 1.0
     completion_status: str = "not_started"  # "not_started" | "in_progress" | "complete"
     summary: str = ""
-    fields: Dict[str, Any] = None
+    current_state: Dict[str, Any] = None  # Current/existing state data
+    future_state: Dict[str, Any] = None   # Desired future state data
     
     def __post_init__(self):
-        if self.fields is None:
-            self.fields = {}
+        if self.current_state is None:
+            self.current_state = {}
+        if self.future_state is None:
+            self.future_state = {}
 
 
 @dataclass
 class CollectedBusinessData:
     """Hierarchical business data collection with parent categories and child fields."""
     
-    # Parent Categories (6 core discovery areas)
+    # Parent Categories (5 core discovery areas for ROI-focused analysis)
     business_goals: DiscoveryCategory = None
-    pain_points: DiscoveryCategory = None  
+    stakeholders: DiscoveryCategory = None  
+    current_problems: DiscoveryCategory = None
     key_metrics: DiscoveryCategory = None
-    constraints: DiscoveryCategory = None
-    stakeholders: DiscoveryCategory = None
-    urgency: DiscoveryCategory = None
+    implementation_context: DiscoveryCategory = None
     
     def __post_init__(self):
         """Initialize discovery categories with their child fields."""
@@ -55,52 +57,13 @@ class CollectedBusinessData:
         if self.business_goals is None:
             self.business_goals = DiscoveryCategory(
                 name="Business Goals",
-                fields={
-                    "primary_objectives": [],      # Main business goals
+                current_state={},
+                future_state={
+                    "primary_objectives": [],     # Main business goals
                     "success_criteria": [],       # How success is measured
                     "kpis": [],                   # Key performance indicators
-                    "timeline_goals": {},         # {"short_term": [], "long_term": []}
-                    "strategic_alignment": ""     # How this fits company strategy
-                }
-            )
-        
-        # Initialize Pain Points category
-        if self.pain_points is None:
-            self.pain_points = DiscoveryCategory(
-                name="Pain Points",
-                fields={
-                    "current_problems": [],       # [{"description": str, "impact": str, "frequency": str}]
-                    "technical_debt": [],         # Technical issues
-                    "process_inefficiencies": [], # Workflow problems
-                    "user_complaints": [],        # User-reported issues
-                    "cost_drains": []            # Areas causing financial loss
-                }
-            )
-        
-        # Initialize Key Metrics category  
-        if self.key_metrics is None:
-            self.key_metrics = DiscoveryCategory(
-                name="Key Metrics",
-                fields={
-                    "performance_metrics": [],    # Response time, throughput, etc.
-                    "business_metrics": [],       # Revenue, conversion, etc.
-                    "user_metrics": [],          # User satisfaction, adoption, etc.
-                    "operational_metrics": [],   # Uptime, error rates, etc.
-                    "baseline_measurements": {}  # Current metric values
-                }
-            )
-        
-        # Initialize Constraints category
-        if self.constraints is None:
-            self.constraints = DiscoveryCategory(
-                name="Constraints",
-                fields={
-                    "timeline_constraints": {},   # {"hard_deadline": str, "preferred_timeline": str}
-                    "budget_constraints": {},     # {"max_budget": float, "budget_flexibility": str}
-                    "technical_constraints": [],  # Technical limitations
-                    "regulatory_requirements": [], # Compliance needs
-                    "business_constraints": [],   # Organizational limitations
-                    "resource_constraints": {}    # {"team_size": int, "expertise_gaps": []}
+                    "strategic_alignment": "",    # How this fits company strategy
+                    "timeline_goals": {}          # {"short_term": [], "long_term": []}
                 }
             )
         
@@ -108,40 +71,100 @@ class CollectedBusinessData:
         if self.stakeholders is None:
             self.stakeholders = DiscoveryCategory(
                 name="Stakeholders",
-                fields={
+                current_state={
                     "decision_makers": [],        # [{"name": str, "role": str, "influence": str}]
                     "technical_team": [],         # Engineering stakeholders
                     "business_users": [],         # End users and business stakeholders
-                    "external_stakeholders": [], # Customers, partners, vendors
-                    "project_sponsors": [],       # Executive sponsors
-                    "communication_plan": {}      # How to keep stakeholders informed
+                    "external_stakeholders": [],  # Customers, partners, vendors
+                    "project_sponsors": []        # Executive sponsors
+                },
+                future_state={
+                    "communication_plan": {},     # How to keep stakeholders informed
+                    "change_management": [],      # Training, adoption strategies
+                    "resource_needs": {}          # Additional team members needed
                 }
             )
         
-        # Initialize Urgency category
-        if self.urgency is None:
-            self.urgency = DiscoveryCategory(
-                name="Urgency",
-                fields={
-                    "urgency_level": "",          # "low" | "moderate" | "high" | "critical"
-                    "urgency_drivers": [],        # [{"factor": str, "impact": str, "timeline": str}]
-                    "risk_tolerance": "",         # "low" | "moderate" | "high"
-                    "competitive_pressure": {},   # Market/competition factors
-                    "regulatory_deadlines": [],   # Compliance-driven urgency
-                    "business_impact": {}         # Cost of delay, opportunity cost
+        # Initialize Current Problems category  
+        if self.current_problems is None:
+            self.current_problems = DiscoveryCategory(
+                name="Current Problems",
+                current_state={
+                    "technical_issues": [],       # Technical debt, legacy problems
+                    "process_inefficiencies": [], # Workflow problems
+                    "user_complaints": [],        # User-reported issues
+                    "security_risks": [],         # Current security vulnerabilities
+                    "compliance_risks": [],       # Regulatory compliance gaps
+                    "reliability_issues": [],     # System downtime, failures
+                    "operational_risks": [],      # Maintenance, support issues
+                    "cost_drains": []             # Areas causing financial loss
+                },
+                future_state={}  # Problems should be resolved, so future state is empty
+            )
+        
+        # Initialize Key Metrics category
+        if self.key_metrics is None:
+            self.key_metrics = DiscoveryCategory(
+                name="Key Metrics",
+                current_state={
+                    "performance_metrics": {},    # {"response_time": "2s", "throughput": "100/min"}
+                    "business_metrics": {},       # {"revenue": "$1M", "conversion_rate": "2%"}
+                    "operational_metrics": {},    # {"uptime": "99%", "error_rate": "5%"}
+                    "operational_costs": {},      # {"infrastructure": "$5k/month", "maintenance": "$2k/month", "licenses": "$1k/month"}
+                    "user_metrics": {},           # {"satisfaction": "6/10", "adoption": "60%"}
+                    "security_metrics": {}        # {"incidents": "5/month", "vulnerabilities": "20"}
+                },
+                future_state={
+                    "performance_targets": {},    # Target performance metrics
+                    "business_targets": {},       # Target business metrics  
+                    "operational_targets": {},    # Target operational metrics
+                    "cost_savings_targets": {},   # Target operational cost reductions
+                    "user_targets": {},           # Target user experience
+                    "security_targets": {}        # Target security improvements
+                }
+            )
+        
+        # Initialize Implementation Context category
+        if self.implementation_context is None:
+            self.implementation_context = DiscoveryCategory(
+                name="Implementation Context",
+                current_state={
+                    "team_capacity": {},          # Current team size, skills, availability
+                    "technical_constraints": [], # Current system limitations
+                    "organizational_readiness": {} # Change management readiness
+                },
+                future_state={
+                    "project_budget": {},         # {"max_investment": float, "budget_flexibility": str, "funding_source": str}
+                    "resource_plan": {},          # {"team_size_needed": int, "expertise_required": [], "external_help": bool}
+                    "timeline_requirements": {},  # {"hard_deadline": str, "preferred_timeline": str}
+                    "regulatory_compliance": [],  # Compliance requirements to meet
+                    "business_constraints": [],   # Organizational limitations
+                    "implementation_risks": []    # Project execution risks
                 }
             )
     
     def get_category_progress(self, category_name: str) -> float:
         """Calculate progress for a specific discovery category."""
         category = getattr(self, category_name.lower().replace(" ", "_"))
-        if not category or not category.fields:
+        if not category:
             return 0.0
         
-        total_fields = len(category.fields)
+        # Count non-empty fields in both current_state and future_state
+        total_fields = len(category.current_state) + len(category.future_state)
         completed_fields = 0
         
-        for field_name, field_value in category.fields.items():
+        # Check current_state fields
+        for field_name, field_value in category.current_state.items():
+            if field_value:  # Not None and not empty
+                if isinstance(field_value, list) and len(field_value) > 0:
+                    completed_fields += 1
+                elif isinstance(field_value, dict) and len(field_value) > 0:
+                    completed_fields += 1
+                elif isinstance(field_value, str) and field_value.strip():
+                    completed_fields += 1
+        
+        # Check future_state fields  
+        for field_name, field_value in category.future_state.items():
             if field_value:  # Not None and not empty
                 if isinstance(field_value, list) and len(field_value) > 0:
                     completed_fields += 1
@@ -165,14 +188,14 @@ class CollectedBusinessData:
     
     def get_overall_completeness_score(self) -> float:
         """Calculate overall discovery completeness across all categories."""
-        categories = ["business_goals", "pain_points", "key_metrics", "constraints", "stakeholders", "urgency"]
+        categories = ["business_goals", "stakeholders", "current_problems", "key_metrics", "implementation_context"]
         total_progress = sum(self.get_category_progress(cat) for cat in categories)
         return total_progress / len(categories)
     
     def get_missing_categories(self) -> List[str]:
         """Get categories that need more information."""
         missing = []
-        categories = ["business_goals", "pain_points", "key_metrics", "constraints", "stakeholders", "urgency"]
+        categories = ["business_goals", "stakeholders", "current_problems", "key_metrics", "implementation_context"]
         
         for cat_name in categories:
             progress = self.get_category_progress(cat_name)
@@ -181,30 +204,36 @@ class CollectedBusinessData:
         
         return missing
     
-    def update_category_field(self, category_name: str, field_name: str, value: Any):
-        """Update a specific field within a category."""
+    def update_category_field(self, category_name: str, field_name: str, value: Any, state_type: str = "current_state"):
+        """Update a specific field within a category's current or future state."""
         category = getattr(self, category_name.lower().replace(" ", "_"))
-        if category and category.fields:
-            if isinstance(value, list) and field_name in category.fields and isinstance(category.fields[field_name], list):
-                category.fields[field_name].extend(value)
+        if not category:
+            return
+        
+        # Get the appropriate state dict
+        state_dict = category.current_state if state_type == "current_state" else category.future_state
+        
+        if field_name in state_dict:
+            if isinstance(value, list) and isinstance(state_dict[field_name], list):
+                state_dict[field_name].extend(value)
             else:
-                category.fields[field_name] = value
-            
-            # Update progress after modification
-            self.get_category_progress(category_name)
-            
-            # Generate category summary
-            self._update_category_summary(category_name)
+                state_dict[field_name] = value
+        
+        # Update progress after modification
+        self.get_category_progress(category_name)
+        
+        # Generate category summary
+        self._update_category_summary(category_name)
     
     def _update_category_summary(self, category_name: str):
-        """Generate a human-readable summary for a category based on its fields."""
+        """Generate a human-readable summary for a category based on its current and future state fields."""
         category = getattr(self, category_name.lower().replace(" ", "_"))
         if not category:
             return
         
         if category_name == "business_goals":
-            objectives = category.fields.get("primary_objectives", [])
-            kpis = category.fields.get("kpis", [])
+            objectives = category.future_state.get("primary_objectives", [])
+            kpis = category.future_state.get("kpis", [])
             summary_parts = []
             if objectives:
                 summary_parts.append(f"{len(objectives)} primary objectives")
@@ -212,45 +241,64 @@ class CollectedBusinessData:
                 summary_parts.append(f"{len(kpis)} KPIs defined")
             category.summary = ", ".join(summary_parts) if summary_parts else "No goals defined yet"
             
-        elif category_name == "pain_points":
-            problems = category.fields.get("current_problems", [])
-            tech_debt = category.fields.get("technical_debt", [])
+        elif category_name == "current_problems":
+            tech_issues = category.current_state.get("technical_issues", [])
+            security_risks = category.current_state.get("security_risks", [])
             summary_parts = []
-            if problems:
-                summary_parts.append(f"{len(problems)} current problems")
-            if tech_debt:
-                summary_parts.append(f"{len(tech_debt)} technical issues")
-            category.summary = ", ".join(summary_parts) if summary_parts else "No pain points identified"
+            if tech_issues:
+                summary_parts.append(f"{len(tech_issues)} technical issues")
+            if security_risks:
+                summary_parts.append(f"{len(security_risks)} security risks")
+            category.summary = ", ".join(summary_parts) if summary_parts else "No problems identified"
             
         elif category_name == "stakeholders":
-            decision_makers = category.fields.get("decision_makers", [])
-            team = category.fields.get("technical_team", [])
-            users = category.fields.get("business_users", [])
+            decision_makers = category.current_state.get("decision_makers", [])
+            team = category.current_state.get("technical_team", [])
+            users = category.current_state.get("business_users", [])
             total_stakeholders = len(decision_makers) + len(team) + len(users)
             category.summary = f"{total_stakeholders} stakeholders identified" if total_stakeholders > 0 else "No stakeholders identified"
             
-        elif category_name == "urgency":
-            level = category.fields.get("urgency_level", "")
-            drivers = category.fields.get("urgency_drivers", [])
-            if level:
-                driver_text = f" with {len(drivers)} drivers" if drivers else ""
-                category.summary = f"{level.title()} urgency{driver_text}"
-            else:
-                category.summary = "Urgency level not defined"
+        elif category_name == "key_metrics":
+            current_metrics = len([v for v in category.current_state.values() if v])
+            target_metrics = len([v for v in category.future_state.values() if v])
+            
+            # Check for operational costs specifically
+            operational_costs = category.current_state.get("operational_costs", {})
+            cost_savings = category.future_state.get("cost_savings_targets", {})
+            
+            summary_parts = []
+            if current_metrics > 0:
+                summary_parts.append(f"{current_metrics} current metrics")
+            if target_metrics > 0:
+                summary_parts.append(f"{target_metrics} targets")
+            if operational_costs:
+                summary_parts.append(f"operational costs tracked")
+            if cost_savings:
+                summary_parts.append(f"savings targets set")
+                
+            category.summary = ", ".join(summary_parts) if summary_parts else "No metrics defined"
         
-        # Add summaries for other categories as needed
-        elif category_name in ["key_metrics", "constraints"]:
-            field_count = sum(1 for field_value in category.fields.values() 
-                            if field_value and (
-                                (isinstance(field_value, list) and len(field_value) > 0) or
-                                (isinstance(field_value, dict) and len(field_value) > 0) or
-                                (isinstance(field_value, str) and field_value.strip())
-                            ))
-            category.summary = f"{field_count} fields completed" if field_count > 0 else "Not started"
+        elif category_name == "implementation_context":
+            current_context = len([v for v in category.current_state.values() if v and (isinstance(v, list) and len(v) > 0 or isinstance(v, dict) and len(v) > 0 or isinstance(v, str) and v.strip())])
+            future_context = len([v for v in category.future_state.values() if v and (isinstance(v, list) and len(v) > 0 or isinstance(v, dict) and len(v) > 0 or isinstance(v, str) and v.strip())])
+            
+            # Check for project budget specifically
+            project_budget = category.future_state.get("project_budget", {})
+            resource_plan = category.future_state.get("resource_plan", {})
+            
+            summary_parts = []
+            if current_context > 0:
+                summary_parts.append(f"{current_context} current constraints")
+            if project_budget:
+                summary_parts.append("project budget defined")
+            if resource_plan:
+                summary_parts.append("resource plan set")
+                
+            category.summary = ", ".join(summary_parts) if summary_parts else "Implementation context not defined"
     
     def get_discovery_summary(self) -> Dict[str, Any]:
         """Get a complete discovery summary for display."""
-        categories = ["business_goals", "pain_points", "key_metrics", "constraints", "stakeholders", "urgency"]
+        categories = ["business_goals", "stakeholders", "current_problems", "key_metrics", "implementation_context"]
         summary = {
             "overall_progress": self.get_overall_completeness_score(),
             "categories": {}
@@ -264,7 +312,8 @@ class CollectedBusinessData:
                     "progress": category.progress,
                     "status": category.completion_status,
                     "summary": category.summary,
-                    "fields": category.fields
+                    "current_state": category.current_state,
+                    "future_state": category.future_state
                 }
         
         return summary
@@ -754,12 +803,12 @@ class ChatEngine:
         completeness = llm_decision.get("completeness_score", 0.0)
         
         # Get some basic stats from the hierarchical categories
-        goals_count = len(collected_data.business_goals.fields.get("primary_objectives", [])) if collected_data.business_goals else 0
-        pain_count = len(collected_data.pain_points.fields.get("current_problems", [])) if collected_data.pain_points else 0
+        goals_count = len(collected_data.business_goals.future_state.get("primary_objectives", [])) if collected_data.business_goals else 0
+        problems_count = len(collected_data.current_problems.current_state.get("technical_issues", [])) + len(collected_data.current_problems.current_state.get("security_risks", [])) if collected_data.current_problems else 0
         stakeholder_count = (
-            len(collected_data.stakeholders.fields.get("decision_makers", [])) +
-            len(collected_data.stakeholders.fields.get("technical_team", [])) +
-            len(collected_data.stakeholders.fields.get("business_users", []))
+            len(collected_data.stakeholders.current_state.get("decision_makers", [])) +
+            len(collected_data.stakeholders.current_state.get("technical_team", [])) +
+            len(collected_data.stakeholders.current_state.get("business_users", []))
         ) if collected_data.stakeholders else 0
         
         response = f"""
@@ -767,9 +816,9 @@ Perfect! I've gathered enough information to move forward. Based on our conversa
 
 Here's what I've captured:
 • Business Goals: {goals_count} objectives identified
-• Pain Points: {pain_count} issues documented  
+• Current Problems: {problems_count} issues documented  
 • Stakeholders: {stakeholder_count} stakeholders mapped
-• Discovery Status: {len([cat for cat in ['business_goals', 'pain_points', 'key_metrics', 'constraints', 'stakeholders', 'urgency'] if getattr(collected_data, cat) and getattr(collected_data, cat).progress > 0])}/6 categories started
+• Discovery Status: {len([cat for cat in ['business_goals', 'stakeholders', 'current_problems', 'key_metrics', 'implementation_context'] if getattr(collected_data, cat) and getattr(collected_data, cat).progress > 0])}/5 categories started
 
 Let me now analyze your current system to provide accurate ROI calculations and recommendations. This will take a moment...
         """.strip()
@@ -804,48 +853,56 @@ Let me now analyze your current system to provide accurate ROI calculations and 
         if "business_goals" in summary:
             goals = summary["business_goals"]
             if isinstance(goals, list):
-                collected_data.update_category_field("business_goals", "primary_objectives", goals)
+                collected_data.update_category_field("business_goals", "primary_objectives", goals, "future_state")
             elif isinstance(goals, str):
-                collected_data.update_category_field("business_goals", "primary_objectives", [goals])
+                collected_data.update_category_field("business_goals", "primary_objectives", [goals], "future_state")
         
-        # Pain points processing
-        if "pain_points" in summary:
-            pain_points = summary["pain_points"]
-            if isinstance(pain_points, list):
-                for point in pain_points:
-                    if isinstance(point, str):
-                        collected_data.update_category_field("pain_points", "current_problems", [point])
-                    elif isinstance(point, dict) and "description" in point:
-                        collected_data.update_category_field("pain_points", "current_problems", [point["description"]])
+        # Current problems processing (renamed from pain_points)
+        if "current_problems" in summary or "pain_points" in summary:
+            problems = summary.get("current_problems", summary.get("pain_points", []))
+            if isinstance(problems, list):
+                for problem in problems:
+                    if isinstance(problem, str):
+                        collected_data.update_category_field("current_problems", "technical_issues", [problem], "current_state")
+                    elif isinstance(problem, dict) and "description" in problem:
+                        collected_data.update_category_field("current_problems", "technical_issues", [problem["description"]], "current_state")
         
         # Key metrics processing
         if "key_metrics" in summary:
             metrics = summary["key_metrics"]
             if isinstance(metrics, list):
-                collected_data.update_category_field("key_metrics", "performance_metrics", metrics)
-            elif isinstance(metrics, str):
-                collected_data.update_category_field("key_metrics", "performance_metrics", [metrics])
+                for metric in metrics:
+                    if isinstance(metric, str):
+                        collected_data.update_category_field("key_metrics", "performance_metrics", {metric: ""}, "current_state")
+            elif isinstance(metrics, dict):
+                collected_data.update_category_field("key_metrics", "performance_metrics", metrics, "current_state")
         
-        # Constraints processing
-        if "constraints" in summary:
-            constraints = summary["constraints"]
-            if isinstance(constraints, list):
-                for constraint in constraints:
-                    if isinstance(constraint, str):
-                        # Categorize constraint type
-                        if "timeline" in constraint.lower() or "deadline" in constraint.lower():
-                            collected_data.update_category_field("constraints", "timeline_constraints", [constraint])
-                        elif "budget" in constraint.lower() or "cost" in constraint.lower():
-                            collected_data.update_category_field("constraints", "budget_constraints", [constraint])
-                        elif "regulatory" in constraint.lower() or "compliance" in constraint.lower():
-                            collected_data.update_category_field("constraints", "regulatory_constraints", [constraint])
+        # Operational costs processing (separate from project budget)
+        if "operational_costs" in summary or "current_costs" in summary:
+            costs = summary.get("operational_costs", summary.get("current_costs", {}))
+            if isinstance(costs, dict):
+                collected_data.update_category_field("key_metrics", "operational_costs", costs, "current_state")
+        
+        # Implementation context processing (project investment focus)
+        if "implementation_context" in summary or "constraints" in summary or "project_budget" in summary:
+            context_data = summary.get("implementation_context", summary.get("constraints", []))
+            
+            # Handle project budget separately
+            if "project_budget" in summary:
+                budget_info = summary["project_budget"]
+                if isinstance(budget_info, dict):
+                    collected_data.update_category_field("implementation_context", "project_budget", budget_info, "future_state")
+            
+            # Handle other context items
+            if isinstance(context_data, list):
+                for item in context_data:
+                    if isinstance(item, str):
+                        if "timeline" in item.lower() or "deadline" in item.lower():
+                            collected_data.update_category_field("implementation_context", "timeline_requirements", [item], "future_state")
+                        elif "team" in item.lower() or "resource" in item.lower():
+                            collected_data.update_category_field("implementation_context", "resource_plan", [item], "future_state")
                         else:
-                            collected_data.update_category_field("constraints", "business_constraints", [constraint])
-                    elif isinstance(constraint, dict):
-                        constraint_type = constraint.get("type", "business")
-                        field_name = f"{constraint_type}_constraints"
-                        if field_name in collected_data.constraints.fields:
-                            collected_data.update_category_field("constraints", field_name, [constraint.get("description", "")])
+                            collected_data.update_category_field("implementation_context", "business_constraints", [item], "future_state")
         
         # Stakeholders processing
         if "stakeholders" in summary:
@@ -855,85 +912,57 @@ Let me now analyze your current system to provide accurate ROI calculations and 
                     if isinstance(stakeholder, str):
                         # Categorize stakeholder type
                         if any(role in stakeholder.lower() for role in ["cto", "manager", "director", "vp", "ceo", "lead"]):
-                            collected_data.update_category_field("stakeholders", "decision_makers", [stakeholder])
+                            collected_data.update_category_field("stakeholders", "decision_makers", [stakeholder], "current_state")
                         elif any(role in stakeholder.lower() for role in ["dev", "engineer", "tech", "architect"]):
-                            collected_data.update_category_field("stakeholders", "technical_team", [stakeholder])
+                            collected_data.update_category_field("stakeholders", "technical_team", [stakeholder], "current_state")
                         else:
-                            collected_data.update_category_field("stakeholders", "business_users", [stakeholder])
-                    elif isinstance(stakeholder, dict):
-                        stakeholder_type = stakeholder.get("type", "business_users")
-                        field_name = stakeholder_type if stakeholder_type in collected_data.stakeholders.fields else "business_users"
-                        collected_data.update_category_field("stakeholders", field_name, [stakeholder.get("name", "")])
-        
-        # Urgency processing
-        if "urgency" in summary:
-            urgency = summary["urgency"]
-            if isinstance(urgency, str) and urgency in ["low", "moderate", "high"]:
-                collected_data.update_category_field("urgency", "urgency_level", urgency)
-                collected_data.update_category_field("urgency", "urgency_drivers", ["Business priority"])
-            elif isinstance(urgency, dict):
-                for key, value in urgency.items():
-                    if key in collected_data.urgency.fields:
-                        collected_data.update_category_field("urgency", key, value)
+                            collected_data.update_category_field("stakeholders", "business_users", [stakeholder], "current_state")
     
     def _process_extracted_data(self, extracted: Dict[str, Any], collected_data: CollectedBusinessData):
         """Process incremental extracted data into hierarchical categories."""
         
         # Direct field mapping for simple cases
         simple_mappings = {
-            "business_goals": ("business_goals", "primary_objectives"),
-            "key_metrics": ("key_metrics", "performance_metrics")
+            "business_goals": ("business_goals", "primary_objectives", "future_state"),
+            "key_metrics": ("key_metrics", "performance_metrics", "current_state")
         }
         
-        for field, (category, target_field) in simple_mappings.items():
+        for field, (category, target_field, state_type) in simple_mappings.items():
             if field in extracted:
                 values = extracted[field]
                 if isinstance(values, list):
-                    collected_data.update_category_field(category, target_field, values)
+                    collected_data.update_category_field(category, target_field, values, state_type)
                 elif isinstance(values, str):
-                    collected_data.update_category_field(category, target_field, [values])
+                    collected_data.update_category_field(category, target_field, [values], state_type)
         
         # Complex field processing
-        if "constraints" in extracted:
-            constraints = extracted["constraints"]
-            if isinstance(constraints, list):
-                for constraint in constraints:
-                    if isinstance(constraint, str):
-                        collected_data.update_category_field("constraints", "business_constraints", [constraint])
-                    elif isinstance(constraint, dict):
-                        constraint_type = constraint.get("type", "business")
-                        field_name = f"{constraint_type}_constraints"
-                        if field_name in collected_data.constraints.fields:
-                            collected_data.update_category_field("constraints", field_name, [constraint.get("description", "")])
+        if "current_problems" in extracted or "pain_points" in extracted:
+            problems = extracted.get("current_problems", extracted.get("pain_points", []))
+            if isinstance(problems, list):
+                for problem in problems:
+                    if isinstance(problem, str):
+                        collected_data.update_category_field("current_problems", "technical_issues", [problem], "current_state")
+                    elif isinstance(problem, dict) and "description" in problem:
+                        collected_data.update_category_field("current_problems", "technical_issues", [problem["description"]], "current_state")
+        
+        if "implementation_context" in extracted or "constraints" in extracted:
+            context_data = extracted.get("implementation_context", extracted.get("constraints", []))
+            if isinstance(context_data, list):
+                for item in context_data:
+                    if isinstance(item, str):
+                        if "budget" in item.lower() or "investment" in item.lower():
+                            collected_data.update_category_field("implementation_context", "project_budget", [item], "future_state")
+                        elif "team" in item.lower() or "resource" in item.lower():
+                            collected_data.update_category_field("implementation_context", "resource_plan", [item], "future_state")
+                        else:
+                            collected_data.update_category_field("implementation_context", "business_constraints", [item], "future_state")
         
         if "stakeholders" in extracted:
             stakeholders = extracted["stakeholders"]
             if isinstance(stakeholders, list):
                 for stakeholder in stakeholders:
                     if isinstance(stakeholder, str):
-                        collected_data.update_category_field("stakeholders", "business_users", [stakeholder])
-                    elif isinstance(stakeholder, dict):
-                        stakeholder_type = stakeholder.get("type", "business_users")
-                        field_name = stakeholder_type if stakeholder_type in collected_data.stakeholders.fields else "business_users"
-                        collected_data.update_category_field("stakeholders", field_name, [stakeholder.get("name", "")])
-        
-        if "pain_points" in extracted:
-            pain_points = extracted["pain_points"]
-            if isinstance(pain_points, list):
-                for point in pain_points:
-                    if isinstance(point, str):
-                        collected_data.update_category_field("pain_points", "current_problems", [point])
-                    elif isinstance(point, dict) and "description" in point:
-                        collected_data.update_category_field("pain_points", "current_problems", [point["description"]])
-        
-        if "urgency" in extracted:
-            urgency = extracted["urgency"]
-            if isinstance(urgency, str) and urgency in ["low", "moderate", "high"]:
-                collected_data.update_category_field("urgency", "urgency_level", urgency)
-            elif isinstance(urgency, dict):
-                for key, value in urgency.items():
-                    if key in collected_data.urgency.fields:
-                        collected_data.update_category_field("urgency", key, value)
+                        collected_data.update_category_field("stakeholders", "business_users", [stakeholder], "current_state")
     
 
     
@@ -1002,18 +1031,27 @@ Your goal is to guide the user through a structured discovery process for system
 Use the following conversation so far:
 {self._format_conversation_history(conversation_history)}
 
-If important business areas are still missing (goals, pain points, metrics, constraints, stakeholders, urgency), ask the next most relevant question.
+COMPLETION CRITERIA:
+You can complete discovery when you have enough information for ROI calculations, even if some details are missing. Complete when you have:
+- At least 2-3 business goals or objectives
+- Major current problems identified (performance, cost, or operational issues)
+- Some key metrics (current costs, performance numbers, or business impact)
+- Basic stakeholder information (decision makers or team size)
+- Implementation context (budget range, timeline, or constraints)
 
-If you have sufficient information to summarize, output a structured JSON summary like:
+Don't wait for 100% completion if the user doesn't know certain details. Focus on ROI-critical information.
+
+If important business areas are still missing, ask the next most relevant question.
+
+If you have sufficient information to calculate ROI and business case, output a structured JSON summary like:
 {{
   "status": "complete",
   "summary": {{
     "business_goals": [...],
-    "pain_points": [...],
-    "key_metrics": [...],
-    "constraints": [...],
     "stakeholders": [...],
-    "urgency": "..."
+    "current_problems": [...],
+    "key_metrics": [...],
+    "implementation_context": [...]
   }}
 }}
 
