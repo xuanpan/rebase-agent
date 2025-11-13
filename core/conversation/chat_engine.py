@@ -9,6 +9,7 @@ from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass, asdict
 from enum import Enum
 import json
+import re
 from datetime import datetime, timezone
 
 try:
@@ -332,6 +333,7 @@ class ChatResponse:
     progress_percentage: float
     
     # Enhanced LLM-driven fields  
+    collected_data: Optional[Dict[str, Any]] = None
     discovery_summary: Optional[Dict[str, Any]] = None
     data_completeness: float = 0.0
     missing_critical_info: List[str] = None
@@ -340,6 +342,7 @@ class ChatResponse:
     
     # Original fields
     action_required: Optional[str] = None
+    structured_data: Optional[Dict[str, Any]] = None
     confidence_level: float = 0.0
     
     def __post_init__(self):
@@ -468,8 +471,12 @@ class ChatEngine:
                 
                 # Update collected data from LLM response
                 if "extracted_data" in llm_decision:
+                    logger.info(f"Processing extracted data: {llm_decision['extracted_data']}")
                     collected_data = await self._update_collected_data(collected_data, llm_decision)
                     self.session_business_data[session_id] = collected_data
+                    logger.info(f"Updated session data. New completeness: {collected_data.get_overall_completeness_score()}")
+                else:
+                    logger.info("No extracted_data found in LLM decision")
             
             # Add assistant response to conversation
             self.context_manager.add_message(session_id, "assistant", response_content)
@@ -489,12 +496,14 @@ class ChatEngine:
                 suggested_responses=suggested_responses,
                 current_phase=next_phase,
                 progress_percentage=progress,
-                discovery_summary=collected_data.get_discovery_summary(),
+                collected_data=collected_data.to_dict() if collected_data else {},
+                discovery_summary=collected_data.get_discovery_summary() if collected_data else {},
                 data_completeness=llm_decision.get("completeness_score", 0.0),
                 missing_critical_info=llm_decision.get("missing_critical_info", []),
                 extraction_confidence=llm_decision.get("confidence", 0.0),
                 next_question_reasoning=llm_decision.get("reasoning", "LLM-driven discovery"),
                 action_required=action_required,
+                structured_data=llm_decision.get("structured_data", {}),
                 confidence_level=llm_decision.get("confidence", 0.0)
             )
             
@@ -510,7 +519,14 @@ class ChatEngine:
                 suggested_responses=["Let me rephrase that", "Can you help me understand?"],
                 current_phase="error",
                 progress_percentage=0.0,
-                discovery_summary=None,
+                collected_data={},
+                discovery_summary={},
+                data_completeness=0.0,
+                missing_critical_info=[],
+                extraction_confidence=0.0,
+                next_question_reasoning="Error recovery",
+                action_required=None,
+                structured_data={},
                 confidence_level=0.0
             )
     
@@ -754,8 +770,14 @@ Respond with only the intent name (e.g., "ANSWER_QUESTION").
             suggested_responses=suggested_responses,
             current_phase=phase,
             progress_percentage=progress,
+            collected_data={},
+            discovery_summary={},
+            data_completeness=0.0,
+            missing_critical_info=[],
+            extraction_confidence=0.0,
+            next_question_reasoning="Completion phase response",
             action_required=action_required,
-            discovery_summary=None,
+            structured_data=structured_data or {},
             confidence_level=message_analysis.confidence
         )
     
@@ -832,11 +854,15 @@ Respond with only the intent name (e.g., "ANSWER_QUESTION").
                 pass
             
             # If not JSON, treat as simple next_question string
+            # But also try to extract data from the latest user message
+            extracted_data = await self._extract_data_from_conversation(conversation_history, collected_data)
+            
             return {
                 "next_question": content,
                 "reasoning": "Continuing discovery process",
-                "progress_percentage": 15.0,
-                "confidence": 0.8
+                "progress_percentage": self._calculate_progress_from_data(collected_data, extracted_data),
+                "confidence": 0.8,
+                "extracted_data": extracted_data
             }
             
         except Exception as e:
@@ -991,49 +1017,78 @@ Let me now analyze your current system to provide accurate ROI calculations and 
     
     def _process_extracted_data(self, extracted: Dict[str, Any], collected_data: CollectedBusinessData):
         """Process incremental extracted data into hierarchical categories."""
+        logger.info(f"Processing extracted data: {extracted}")
         
-        # Direct field mapping for simple cases
-        simple_mappings = {
-            "business_goals": ("business_goals", "primary_objectives", "future_state"),
-            "key_metrics": ("key_metrics", "performance_metrics", "current_state")
-        }
+        # Handle business_goals with nested structure
+        if "business_goals" in extracted:
+            logger.info("Processing business goals")
+            goals_data = extracted["business_goals"]
+            if isinstance(goals_data, dict) and "primary_objectives" in goals_data:
+                objectives = goals_data["primary_objectives"]
+                if isinstance(objectives, list):
+                    for obj in objectives:
+                        collected_data.update_category_field("business_goals", "primary_objectives", [obj], "future_state")
+                        logger.info(f"Added business goal: {obj}")
+            elif isinstance(goals_data, list):
+                for obj in goals_data:
+                    collected_data.update_category_field("business_goals", "primary_objectives", [obj], "future_state")
+                    logger.info(f"Added business goal: {obj}")
         
-        for field, (category, target_field, state_type) in simple_mappings.items():
-            if field in extracted:
-                values = extracted[field]
-                if isinstance(values, list):
-                    collected_data.update_category_field(category, target_field, values, state_type)
-                elif isinstance(values, str):
-                    collected_data.update_category_field(category, target_field, [values], state_type)
+        # Handle current_problems with nested structure
+        if "current_problems" in extracted:
+            logger.info("Processing current problems")
+            problems_data = extracted["current_problems"]
+            if isinstance(problems_data, dict) and "technical_issues" in problems_data:
+                issues = problems_data["technical_issues"]
+                if isinstance(issues, list):
+                    for issue in issues:
+                        collected_data.update_category_field("current_problems", "technical_issues", [issue], "current_state")
+                        logger.info(f"Added technical issue: {issue}")
+            elif isinstance(problems_data, list):
+                for issue in problems_data:
+                    collected_data.update_category_field("current_problems", "technical_issues", [issue], "current_state")
+                    logger.info(f"Added technical issue: {issue}")
         
-        # Complex field processing
-        if "current_problems" in extracted or "pain_points" in extracted:
-            problems = extracted.get("current_problems", extracted.get("pain_points", []))
-            if isinstance(problems, list):
-                for problem in problems:
-                    if isinstance(problem, str):
-                        collected_data.update_category_field("current_problems", "technical_issues", [problem], "current_state")
-                    elif isinstance(problem, dict) and "description" in problem:
-                        collected_data.update_category_field("current_problems", "technical_issues", [problem["description"]], "current_state")
+        # Handle implementation_context with nested structure
+        if "implementation_context" in extracted:
+            logger.info("Processing implementation context")
+            context_data = extracted["implementation_context"]
+            if isinstance(context_data, dict):
+                for key, value in context_data.items():
+                    if key in ["current_technology", "technology_type", "project_type", "project_timeline"]:
+                        collected_data.update_category_field("implementation_context", key, [value] if isinstance(value, str) else value, "current_state")
+                        logger.info(f"Added implementation context {key}: {value}")
+                    else:
+                        collected_data.update_category_field("implementation_context", "business_constraints", [f"{key}: {value}"], "future_state")
+                        logger.info(f"Added business constraint {key}: {value}")
         
-        if "implementation_context" in extracted or "constraints" in extracted:
-            context_data = extracted.get("implementation_context", extracted.get("constraints", []))
-            if isinstance(context_data, list):
-                for item in context_data:
-                    if isinstance(item, str):
-                        if "budget" in item.lower() or "investment" in item.lower():
-                            collected_data.update_category_field("implementation_context", "project_budget", [item], "future_state")
-                        elif "team" in item.lower() or "resource" in item.lower():
-                            collected_data.update_category_field("implementation_context", "resource_plan", [item], "future_state")
-                        else:
-                            collected_data.update_category_field("implementation_context", "business_constraints", [item], "future_state")
+        # Handle key_metrics
+        if "key_metrics" in extracted:
+            logger.info("Processing key metrics")
+            metrics_data = extracted["key_metrics"]
+            if isinstance(metrics_data, dict):
+                for key, value in metrics_data.items():
+                    collected_data.update_category_field("key_metrics", key, [value] if isinstance(value, str) else value, "current_state")
+                    logger.info(f"Added key metric {key}: {value}")
+            elif isinstance(metrics_data, list):
+                for metric in metrics_data:
+                    collected_data.update_category_field("key_metrics", "performance_metrics", [metric], "current_state")
+                    logger.info(f"Added performance metric: {metric}")
         
+        # Handle stakeholders
         if "stakeholders" in extracted:
-            stakeholders = extracted["stakeholders"]
-            if isinstance(stakeholders, list):
-                for stakeholder in stakeholders:
-                    if isinstance(stakeholder, str):
-                        collected_data.update_category_field("stakeholders", "business_users", [stakeholder], "current_state")
+            logger.info("Processing stakeholders")
+            stakeholders_data = extracted["stakeholders"]
+            if isinstance(stakeholders_data, dict) and "key_decision_makers" in stakeholders_data:
+                decision_makers = stakeholders_data["key_decision_makers"]
+                if isinstance(decision_makers, list):
+                    for dm in decision_makers:
+                        collected_data.update_category_field("stakeholders", "key_decision_makers", [dm], "current_state")
+                        logger.info(f"Added stakeholder: {dm}")
+            elif isinstance(stakeholders_data, list):
+                for stakeholder in stakeholders_data:
+                    collected_data.update_category_field("stakeholders", "business_users", [stakeholder], "current_state")
+                    logger.info(f"Added stakeholder: {stakeholder}")
     
 
     
@@ -1094,39 +1149,59 @@ Let me now analyze your current system to provide accurate ROI calculations and 
         collected_data: CollectedBusinessData,
         context
     ) -> str:
-        """Build prompt that matches your exact specification."""
+        """Build prompt for LLM to make intelligent discovery decisions."""
+        
+        # Calculate current data completeness
+        completeness = collected_data.get_overall_completeness_score()
+        missing_categories = collected_data.get_missing_categories()
+        
+        # Get summary of what we have vs what we need
+        discovery_summary = collected_data.get_discovery_summary()
         
         return f"""
-You are the Rebase Discovery Agent.
-Your goal is to guide the user through a structured discovery process for system modernization.
-Use the following conversation so far:
+You are the Rebase Discovery Agent for system modernization ROI analysis.
+
+CONVERSATION HISTORY:
 {self._format_conversation_history(conversation_history)}
 
-COMPLETION CRITERIA:
-You can complete discovery when you have enough information for ROI calculations, even if some details are missing. Complete when you have:
-- At least 2-3 business goals or objectives
-- Major current problems identified (performance, cost, or operational issues)
-- Some key metrics (current costs, performance numbers, or business impact)
-- Basic stakeholder information (decision makers or team size)
-- Implementation context (budget range, timeline, or constraints)
+CURRENT DISCOVERY STATE:
+Completeness: {completeness:.1%}
+Categories with data: {len([cat for cat in discovery_summary['categories'] if discovery_summary['categories'][cat]['progress'] > 0])}/5
+Missing critical categories: {', '.join(missing_categories) if missing_categories else 'None'}
 
-Don't wait for 100% completion if the user doesn't know certain details. Focus on ROI-critical information.
+DATA COLLECTED SO FAR:
+{self._format_detailed_data_summary(collected_data)}
 
-If important business areas are still missing, ask the next most relevant question.
+DISCOVERY COMPLETION CRITERIA:
+You have enough data to generate an ROI analysis when you have:
+1. At least 2 clear business objectives
+2. Current system problems/pain points identified
+3. Key stakeholders identified (at least decision makers)
+4. Some indication of budget/cost constraints
+5. Basic understanding of current technology/system
 
-If you have sufficient information to calculate ROI and business case, output a structured JSON summary like:
+DECISION LOGIC:
+- If completeness ≥ 60% AND you have the minimum criteria above → COMPLETE
+- If critical ROI information is still missing → CONTINUE with specific question
+- Ask targeted questions to fill the biggest gaps
+
+RESPONSE FORMAT:
+If ready to complete:
 {{
   "status": "complete",
-  "summary": {{
-    "business_goals": [...],
-    "stakeholders": [...],
-    "current_problems": [...],
-    "key_metrics": [...],
-    "implementation_context": [...]
-  }}
+  "summary": "Discovery complete - sufficient data for ROI analysis",
+  "completeness_score": {completeness},
+  "confidence": 0.8
 }}
 
-Otherwise, output a single next_question string.
+If continuing discovery, return ONLY the next question text (no JSON):
+Ask a specific, targeted question to fill the biggest information gap. Examples:
+- "What specific business goals are driving this modernization?"
+- "What problems are you experiencing with the current system?"
+- "Who are the key decision makers for this project?"
+- "What's your rough budget range for this modernization?"
+
+Focus on gathering actionable business information for ROI calculation.
 """
     
 
@@ -1141,6 +1216,222 @@ Otherwise, output a single next_question string.
             formatted.append(f"{role.upper()}: {content}")
         
         return "\n".join(formatted)
+    
+    def _format_collected_data_summary(self, collected_data: CollectedBusinessData) -> str:
+        """Format collected business data for prompt context."""
+        if not collected_data:
+            return "No data collected yet."
+        
+        summary = []
+        
+        # Business Goals
+        if collected_data.business_goals and collected_data.business_goals.progress > 0:
+            goals = collected_data.business_goals.future_state.get('primary_objectives', [])
+            if goals:
+                summary.append(f"Business Goals ({len(goals)}): {', '.join(goals[:2])}")
+        
+        # Current Problems  
+        if collected_data.current_problems and collected_data.current_problems.progress > 0:
+            problems = collected_data.current_problems.current_state.get('technical_issues', [])
+            if problems:
+                summary.append(f"Current Problems ({len(problems)}): {', '.join(problems[:2])}")
+            
+        # Key Metrics
+        if collected_data.key_metrics and collected_data.key_metrics.progress > 0:
+            metrics = collected_data.key_metrics.current_state
+            metric_items = [f"{k}: {v}" for k, v in metrics.items() if v]
+            if metric_items:
+                summary.append(f"Metrics: {', '.join(metric_items[:2])}")
+            
+        # Implementation Context
+        if collected_data.implementation_context and collected_data.implementation_context.progress > 0:
+            context = collected_data.implementation_context.current_state
+            context_items = [f"{k}: {v}" for k, v in context.items() if v]
+            if context_items:
+                summary.append(f"Context: {', '.join(context_items[:2])}")
+        
+        # Stakeholders
+        if collected_data.stakeholders and collected_data.stakeholders.progress > 0:
+            stakeholders = collected_data.stakeholders.current_state.get('decision_makers', [])
+            if stakeholders:
+                summary.append(f"Stakeholders ({len(stakeholders)}): {', '.join(stakeholders[:2])}")
+        
+        if not summary:
+            return "Discovery just starting - minimal data collected."
+            
+        return "\n".join(summary)
+    
+    def _format_detailed_data_summary(self, collected_data: CollectedBusinessData) -> str:
+        """Format detailed data summary for LLM decision making."""
+        if not collected_data:
+            return "No data collected."
+        
+        summary_parts = []
+        
+        # Business Goals
+        if collected_data.business_goals and collected_data.business_goals.progress > 0:
+            goals = collected_data.business_goals.future_state.get('primary_objectives', [])
+            summary_parts.append(f"✓ Business Goals: {len(goals)} objectives defined")
+        else:
+            summary_parts.append("✗ Business Goals: Not identified")
+        
+        # Current Problems
+        if collected_data.current_problems and collected_data.current_problems.progress > 0:
+            issues = collected_data.current_problems.current_state.get('technical_issues', [])
+            summary_parts.append(f"✓ Current Problems: {len(issues)} issues identified")
+        else:
+            summary_parts.append("✗ Current Problems: Not identified")
+        
+        # Stakeholders
+        if collected_data.stakeholders and collected_data.stakeholders.progress > 0:
+            decision_makers = collected_data.stakeholders.current_state.get('decision_makers', [])
+            summary_parts.append(f"✓ Stakeholders: {len(decision_makers)} decision makers identified")
+        else:
+            summary_parts.append("✗ Stakeholders: Not identified")
+        
+        # Key Metrics (budget/costs)
+        if collected_data.key_metrics and collected_data.key_metrics.progress > 0:
+            metrics = collected_data.key_metrics.current_state
+            has_budget = any('budget' in str(v).lower() or 'cost' in str(v).lower() for v in metrics.values())
+            if has_budget:
+                summary_parts.append("✓ Financial Info: Budget/cost information available")
+            else:
+                summary_parts.append("✓ Metrics: Some metrics collected")
+        else:
+            summary_parts.append("✗ Financial Info: No budget/cost information")
+        
+        # Implementation Context
+        if collected_data.implementation_context and collected_data.implementation_context.progress > 0:
+            context = collected_data.implementation_context.current_state
+            tech_info = any('tech' in str(v).lower() or 'react' in str(v).lower() for v in context.values())
+            if tech_info:
+                summary_parts.append("✓ Technical Context: Current technology identified")
+            else:
+                summary_parts.append("✓ Context: Some implementation details")
+        else:
+            summary_parts.append("✗ Technical Context: Current system not described")
+        
+        return "\n".join(summary_parts)
+    
+    async def _extract_data_from_conversation(self, conversation_history: List[Dict[str, str]], collected_data: CollectedBusinessData) -> Dict[str, Any]:
+        """Extract business data from conversation using LLM intelligence."""
+        if not conversation_history:
+            return {}
+        
+        # Get the last few messages for context
+        recent_messages = conversation_history[-3:] if len(conversation_history) >= 3 else conversation_history
+        
+        # Build context of what we already know
+        current_data_summary = self._format_collected_data_summary(collected_data)
+        
+        extraction_prompt = f"""
+You are a business data extraction expert. Analyze the conversation and extract structured business information.
+
+RECENT CONVERSATION:
+{self._format_conversation_history(recent_messages)}
+
+ALREADY COLLECTED:
+{current_data_summary}
+
+EXTRACT DATA IN JSON FORMAT:
+Based on the conversation, extract any new business information that fits these categories:
+
+{{
+  "business_goals": {{
+    "primary_objectives": ["list of business goals/objectives mentioned"]
+  }},
+  "current_problems": {{
+    "technical_issues": ["list of technical problems/issues mentioned"],
+    "performance_issues": ["list of performance problems"],
+    "operational_issues": ["list of operational problems"]
+  }},
+  "key_metrics": {{
+    "budget_info": "budget amount if mentioned",
+    "cost_info": "current costs if mentioned", 
+    "user_scale": "user count/scale if mentioned",
+    "timeline": "timeline information if mentioned"
+  }},
+  "stakeholders": {{
+    "key_decision_makers": ["names and roles of decision makers"],
+    "team_members": ["team members mentioned"]
+  }},
+  "implementation_context": {{
+    "current_technology": "current tech stack mentioned",
+    "project_type": "type of transformation",
+    "constraints": ["any constraints or requirements mentioned"]
+  }}
+}}
+
+RULES:
+1. Only extract information that is explicitly mentioned in the conversation
+2. Don't make assumptions or infer information not clearly stated
+3. Use the exact terminology from the conversation
+4. If no relevant information is found in a category, omit that category
+5. Focus on NEW information not already collected
+
+Return ONLY the JSON object, no explanations.
+"""
+
+        try:
+            response = await self.llm_client.chat_completion([
+                {
+                    "role": "system",
+                    "content": "You are a data extraction expert. Extract business information from conversations and return structured JSON."
+                },
+                {"role": "user", "content": extraction_prompt}
+            ])
+            
+            # Parse LLM response
+            content = response.content.strip()
+            
+            # Try to parse as JSON
+            try:
+                extracted_data = json.loads(content)
+                logger.info(f"LLM extracted data: {extracted_data}")
+                return extracted_data
+            except json.JSONDecodeError as e:
+                logger.warning(f"LLM returned invalid JSON: {content}")
+                return {}
+                
+        except Exception as e:
+            logger.error(f"LLM data extraction failed: {e}")
+            # Only fall back to minimal extraction if LLM completely fails
+            return self._minimal_fallback_extraction(recent_messages)
+    
+    def _minimal_fallback_extraction(self, recent_messages: List[Dict[str, str]]) -> Dict[str, Any]:
+        """Minimal fallback extraction for when LLM is unavailable."""
+        # Only extract very obvious things like explicit budget numbers
+        extracted = {}
+        
+        last_message = ""
+        for msg in reversed(recent_messages):
+            if msg.get("role") == "user":
+                last_message = msg.get("content", "").lower()
+                break
+        
+        if not last_message:
+            return {}
+        
+        # Only extract explicit budget/cost numbers
+        budget_matches = re.findall(r'(\d+)\s*m(?:illion)?', last_message)
+        if budget_matches and any(word in last_message for word in ["budget", "cost", "million"]):
+            if "budget" in last_message:
+                extracted["key_metrics"] = {"budget_info": f"${budget_matches[0]}M"}
+            elif "cost" in last_message:
+                extracted["key_metrics"] = {"cost_info": f"${budget_matches[0]}M"}
+        
+        logger.info(f"Fallback extracted: {extracted}")
+        return extracted
+    
+    def _calculate_progress_from_data(self, collected_data: CollectedBusinessData, new_extracted_data: Dict[str, Any]) -> float:
+        """Calculate progress percentage based on collected data."""
+        # Simulate updating data to calculate what the progress would be
+        temp_data = collected_data
+        if new_extracted_data:
+            self._process_extracted_data(new_extracted_data, temp_data)
+        
+        # Calculate overall completeness
+        return temp_data.get_overall_completeness_score() * 100
     
     # =============================================================================
     # FALLBACK METHODS
