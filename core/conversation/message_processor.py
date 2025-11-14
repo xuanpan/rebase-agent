@@ -1,8 +1,13 @@
 """
 Message processor for handling and analyzing user messages.
 
-This module processes incoming messages, detects intent, and prepares
-them for the conversation engine.
+⚠️ DEPRECATED: This module uses hardcoded keyword matching which is brittle and non-scalable.
+It has been replaced by LLM-driven services:
+- core.services.intent_service.IntentService (for intent classification)
+- core.services.data_extraction_service.DataExtractionService (for entity extraction)
+
+These new services use intelligent LLM analysis instead of keyword matching.
+This file is kept for backward compatibility but should not be used in new code.
 """
 
 from typing import Dict, List, Optional, Any
